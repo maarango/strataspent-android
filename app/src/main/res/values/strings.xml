@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">StrataSpent</string>
+
+    <!-- Auth -->
+    <string name="auth_title">Welcome to StrataSpent</string>
+    <string name="auth_subtitle">Track shared family expenses</string>
+    <string name="auth_display_name">Display name</string>
+    <string name="auth_email">Email</string>
+    <string name="auth_password">Password</string>
+    <string name="auth_sign_in">Sign in</string>
+    <string name="auth_sign_up">Create account</string>
+    <string name="auth_toggle_to_sign_up">No account? Sign up</string>
+    <string name="auth_toggle_to_sign_in">Have an account? Sign in</string>
+    <string name="auth_google_button">Continue with Google</string>
+
+    <!-- Groups -->
+    <string name="groups_title">Your groups</string>
+    <string name="groups_empty">No groups yet. Tap + to create one.</string>
+    <string name="groups_create">Create group</string>
+    <string name="groups_name">Group name</string>
+    <string name="groups_add_member_hint">Member email</string>
+    <string name="groups_add_member">Add</string>
+    <string name="groups_members">Invite members (optional)</string>
+    <string name="groups_create_action">Create</string>
+
+    <!-- Group detail -->
+    <string name="group_balances">Balances</string>
+    <string name="group_expenses">Expenditures</string>
+    <string name="group_expenses_empty">No expenditures yet.</string>
+    <string name="group_add_expense">Add expenditure</string>
+
+    <!-- Add / edit expenditure -->
+    <string name="expense_title">Add expenditure</string>
+    <string name="expense_edit_title">Edit expenditure</string>
+    <string name="expense_amount">Amount</string>
+    <string name="expense_category">Category</string>
+    <string name="expense_date">Date (YYYY-MM-DD)</string>
+    <string name="expense_note">Note</string>
+    <string name="expense_split_between">Split between</string>
+    <string name="expense_save">Save</string>
+    <string name="expense_save_changes">Save changes</string>
+
+    <!-- Add members -->
+    <string name="members_add_title">Add members</string>
+    <string name="members_add_action">Add to group</string>
+    <string name="members_add_content_desc">Add members</string>
+
+    <!-- Common -->
+    <string name="sign_out">Sign out</string>
+    <string name="error_generic">Something went wrong. Please try again.</string>
+    <string name="action_back">Back</string>
+</resources>

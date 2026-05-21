@@ -1,0 +1,137 @@
+# =========================================================
+# Gradle
+# =========================================================
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/**/build/
+
+# Gradle output / caches
+out/
+.gradletasknamecache
+
+# =========================================================
+# Android build artifacts
+# =========================================================
+*.apk
+*.aab
+*.ap_
+*.dex
+bin/
+gen/
+release/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Lint / R8 / mapping
+app/lint-results*
+app/build/outputs/mapping/
+proguard/
+
+# =========================================================
+# Local config (machine-specific; do NOT commit)
+# =========================================================
+local.properties
+.idea/caches/
+.idea/libraries/
+.idea/modules.xml
+.idea/workspace.xml
+.idea/navEditor.xml
+.idea/assetWizardSettings.xml
+.idea/deploymentTargetDropDown.xml
+.idea/deploymentTargetSelector.xml
+.idea/misc.xml
+.idea/jarRepositories.xml
+.idea/compiler.xml
+.idea/render.experimental.xml
+.idea/inspectionProfiles/
+.idea/dictionaries/
+.idea/sonarlint/
+.idea/runConfigurations.xml
+.idea/gradle.xml
+.idea/codeStyles/
+
+# Keep version-controlled IDE config: project name, code style if shared
+!.idea/codeStyles/Project.xml
+
+# =========================================================
+# Secrets — NEVER commit
+# =========================================================
+keystore.properties
+*.jks
+*.keystore
+*.p12
+*.pfx
+
+# Firebase config (per-environment — distribute via secrets manager, not git)
+app/google-services.json
+app/src/*/google-services.json
+
+# Other API keys / env files
+secrets.properties
+.env
+.env.*
+!.env.example
+
+# =========================================================
+# IDE / editor files
+# =========================================================
+*.iml
+.idea/
+*.swp
+*.swo
+*~
+.vscode/
+.fleet/
+
+# =========================================================
+# OS junk
+# =========================================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.Trash-*
+
+# =========================================================
+# Kotlin / JVM
+# =========================================================
+*.class
+hs_err_pid*
+replay_pid*
+
+# =========================================================
+# Logs and tmp
+# =========================================================
+*.log
+*.tmp
+*.bak
+tmp/
+temp/
+
+# =========================================================
+# Built tools (Play asset renderer)
+# =========================================================
+tools/*.class
+
+# Local Gradle wrapper output / screenshots placed at repo root by adb
+screenshot-*.png
+
+# Claude Code runtime state
+.claude/
+build.log

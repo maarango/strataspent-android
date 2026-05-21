@@ -1,0 +1,42 @@
+StrataSpent is the easiest way to track shared expenses with your family or group.
+
+Whether you're managing the household budget, splitting a dinner bill, or
+keeping tabs on monthly subscriptions, StrataSpent keeps everyone on the
+same page in real time.
+
+WHAT YOU CAN DO
+
+• Create groups — invite household members by email; everyone sees the
+  same expenses and balances live.
+• Log expenditures by category — Food, Housing, Transport, Entertainment,
+  and more.
+• Scan receipts with AI — point your camera at any receipt and the app
+  uses Google Gemini to pull out the amount, date, and category.
+• Speak it instead — tap the microphone and say "Cincuenta pesos en
+  comida ayer"; the app understands and fills the form.
+• Split bills with a tap — one-time bar tab or group dinner? Spin up a
+  temporary split, scan the receipt, assign items to people, see who
+  owes what.
+• Per-user financial flow — track your own income and personal spending
+  alongside the group view.
+• Reminders that ping you — never forget rent, utilities, or that
+  recurring subscription. Tap "Pay" when it's due and the expense is
+  logged automatically.
+• Works offline — scan or speak when there's no signal; everything syncs
+  the moment you're back online.
+• Pick your currency — display formatting in USD, EUR, MXN, COP, BRL,
+  ARS, and more.
+• Live sync with the web app — the same shared database powers both
+  Android and web (https://strataspent-124617071143.us-east1.run.app).
+
+PRIVACY
+
+StrataSpent uses Firebase Authentication and Cloud Firestore. Your data
+stays under your Firebase project. Receipt images sent to Google Gemini
+for OCR are processed and not stored.
+
+REQUIREMENTS
+
+• Android 8.0 (Oreo) or newer
+• A Google or email/password account
+• Internet for sync (offline queue catches everything in between)

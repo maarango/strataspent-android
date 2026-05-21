@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark-slate splash background -->
+    <color name="splash_background">#0F172A</color>
+
+    <!-- Indigo accent / wallet icon -->
+    <color name="indigo_primary">#6366F1</color>
+    <color name="indigo_dark">#4338CA</color>
+    <color name="indigo_light">#A5B4FC</color>
+
+    <!-- System bars -->
+    <color name="status_bar">#0F172A</color>
+    <color name="nav_bar">#0F172A</color>
+
+    <color name="white">#FFFFFFFF</color>
+    <color name="black">#FF000000</color>
+</resources>

@@ -1,0 +1,92 @@
+name: Release AAB
+
+# Triggered when you push a tag like `v1.0.0` (or run manually via
+# Actions → "Release AAB" → Run workflow).
+#
+# Produces an upload-ready, signed app-release.aab attached to the
+# resulting GitHub Release. From there, upload to Play Console manually.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Cache Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Decode google-services.json
+        # Set GOOGLE_SERVICES_JSON_B64 in repo Secrets — base64 of your
+        # real app/google-services.json. Generate it locally:
+        #   [Convert]::ToBase64String((Get-Content app/google-services.json -Raw -Encoding Byte))
+        env:
+          B64: ${{ secrets.GOOGLE_SERVICES_JSON_B64 }}
+        run: |
+          if [ -z "$B64" ]; then
+            echo "ERROR: GOOGLE_SERVICES_JSON_B64 secret is not set." >&2
+            exit 1
+          fi
+          echo "$B64" | base64 -d > app/google-services.json
+
+      - name: Decode release keystore
+        # Set RELEASE_KEYSTORE_B64 in repo Secrets — base64 of your .jks file.
+        env:
+          B64: ${{ secrets.RELEASE_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$B64" ]; then
+            echo "ERROR: RELEASE_KEYSTORE_B64 secret is not set." >&2
+            exit 1
+          fi
+          echo "$B64" | base64 -d > strataspent-release.jks
+
+      - name: Write keystore.properties
+        env:
+          STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        run: |
+          cat > keystore.properties <<EOF
+          storeFile=../strataspent-release.jks
+          storePassword=$STORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          EOF
+
+      - name: Write local.properties (Gemini key)
+        env:
+          GEMINI: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          cat > local.properties <<EOF
+          sdk.dir=/usr/local/lib/android/sdk
+          geminiApiKey=$GEMINI
+          EOF
+
+      - name: Build release AAB
+        run: ./gradlew bundleRelease --no-daemon
+
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-aab
+          path: app/build/outputs/bundle/release/app-release.aab
+
+      - name: Create GitHub release with the AAB attached
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: app/build/outputs/bundle/release/app-release.aab
+          generate_release_notes: true

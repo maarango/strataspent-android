@@ -1,0 +1,12 @@
+Initial release.
+
+• Native Android client for the StrataSpent family-expense tracker.
+• Shared groups, balances, split ratios.
+• Receipt OCR powered by Google Gemini.
+• Voice input that understands natural-language descriptions in
+  English, Spanish, Portuguese, French, and German.
+• Offline queue: scan or speak when you're disconnected — everything
+  syncs when you're back online.
+• Analytics: group spending breakdown, personal cash flow.
+• One-time bill splitter for bar tabs and group dinners.
+• Reminders with one-tap "Pay" action.

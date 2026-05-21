@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Internal cache: temporary receipt captures -->
+    <cache-path
+        name="captures"
+        path="captures/" />
+
+    <!-- Internal files for processed receipts -->
+    <files-path
+        name="receipts"
+        path="receipts/" />
+
+    <!-- External cache for sharing with gallery if needed -->
+    <external-cache-path
+        name="external_captures"
+        path="captures/" />
+
+    <!-- External files for gallery picker fallbacks -->
+    <external-files-path
+        name="external_receipts"
+        path="Pictures/StrataSpent/" />
+</paths>
