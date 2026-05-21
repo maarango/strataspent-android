@@ -170,8 +170,8 @@ class AddExpenseViewModel(
         _state.update { it.copy(ocrLoading = true, ocrMessage = null) }
         viewModelScope.launch {
             val result = ocrRepo.extractReceipt(image)
-            if (result is OcrRepository.OcrResult.Failure) {
-                // Likely a network/Gemini failure — queue for background retry.
+            if (result is OcrRepository.OcrResult.Failure && result.retryable) {
+                // Looks like a real connectivity problem — queue for retry.
                 pendingOcr.enqueueImage(groupId, image)
                 OcrProcessingWorker.schedule(appContext)
                 _state.update {
@@ -193,7 +193,7 @@ class AddExpenseViewModel(
         _state.update { it.copy(ocrLoading = true, ocrMessage = "Heard: \"$transcript\"") }
         viewModelScope.launch {
             val result = ocrRepo.transcribeToExpense(transcript, todayIso())
-            if (result is OcrRepository.OcrResult.Failure) {
+            if (result is OcrRepository.OcrResult.Failure && result.retryable) {
                 pendingOcr.enqueueVoice(groupId, transcript)
                 OcrProcessingWorker.schedule(appContext)
                 _state.update {

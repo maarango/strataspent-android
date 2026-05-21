@@ -73,9 +73,15 @@ class OcrProcessingWorker(
                         pending.remove(job.id)
                     }
                     is OcrRepository.OcrResult.Failure -> {
-                        // Likely network. Leave in queue, mark transient.
-                        anyTransient = true
-                        Log.w(TAG, "Job ${job.id} failed (will retry): ${result.message}")
+                        if (result.retryable) {
+                            anyTransient = true
+                            Log.w(TAG, "Job ${job.id} failed (will retry): ${result.message}")
+                        } else {
+                            // Permanent failure — Gemini responded but the body
+                            // wasn't usable. Looping won't help; drop the job.
+                            Log.w(TAG, "Job ${job.id} unparseable, dropping: ${result.message}")
+                            pending.remove(job.id)
+                        }
                     }
                     is OcrRepository.OcrResult.Success -> {
                         val amount = result.amount ?: 0.0

@@ -27,7 +27,15 @@ class OcrRepository(private val apiKey: String) {
 
     sealed interface OcrResult {
         data object NotConfigured : OcrResult
-        data class Failure(val message: String) : OcrResult
+        /**
+         * @param retryable true when the failure is likely transient (network
+         *   reachability, timeout) so a queued retry could succeed. false when
+         *   we reached Gemini but couldn't use the response (empty/non-JSON
+         *   body, content blocked) — retrying with the same input will fail
+         *   the same way, so the UI should surface the real error and the
+         *   background worker should drop the job instead of looping.
+         */
+        data class Failure(val message: String, val retryable: Boolean) : OcrResult
         data class Success(
             val category: String?,
             val amount: Double?,
@@ -57,7 +65,7 @@ class OcrRepository(private val apiKey: String) {
             parse(response.text.orEmpty())
         }.getOrElse { t ->
             Log.w(TAG, "Gemini OCR failed", t)
-            OcrResult.Failure(t.message ?: "OCR failed")
+            OcrResult.Failure(t.message ?: "OCR failed", retryable = isLikelyTransient(t))
         }
     }
 
@@ -66,7 +74,9 @@ class OcrRepository(private val apiKey: String) {
     suspend fun transcribeToExpense(transcript: String, todayIso: String): OcrResult =
         withContext(Dispatchers.IO) {
             if (apiKey.isBlank()) return@withContext OcrResult.NotConfigured
-            if (transcript.isBlank()) return@withContext OcrResult.Failure("Empty transcript")
+            if (transcript.isBlank()) return@withContext OcrResult.Failure(
+                "Empty transcript", retryable = false,
+            )
             val model = newModel()
             val prompt = VOICE_PROMPT_TEMPLATE
                 .replace("{TODAY}", todayIso)
@@ -76,7 +86,7 @@ class OcrRepository(private val apiKey: String) {
                 parse(response.text.orEmpty())
             }.getOrElse { t ->
                 Log.w(TAG, "Voice → expense parse failed", t)
-                OcrResult.Failure(t.message ?: "Voice parse failed")
+                OcrResult.Failure(t.message ?: "Voice parse failed", retryable = isLikelyTransient(t))
             }
         }
 
@@ -127,10 +137,13 @@ class OcrRepository(private val apiKey: String) {
     }
 
     private fun parse(raw: String): OcrResult {
-        if (raw.isBlank()) return OcrResult.Failure("Empty Gemini response")
+        // We got past the HTTP call to reach this function, so any failure here
+        // is a response-shape problem, not a network one — retrying won't help.
+        if (raw.isBlank()) return OcrResult.Failure("Empty Gemini response", retryable = false)
         val jsonText = extractJsonObject(raw)
             ?: return OcrResult.Failure(
-                "No JSON object in Gemini reply: ${raw.take(160).replace('\n', ' ')}"
+                "No JSON object in Gemini reply: ${raw.take(160).replace('\n', ' ')}",
+                retryable = false,
             )
         return try {
             val json = JSONObject(jsonText)
@@ -143,8 +156,41 @@ class OcrRepository(private val apiKey: String) {
             )
         } catch (t: Throwable) {
             Log.w(TAG, "OCR JSON parse failed for: $jsonText", t)
-            OcrResult.Failure("Couldn't read Gemini response as JSON")
+            OcrResult.Failure("Couldn't read Gemini response as JSON", retryable = false)
         }
+    }
+
+    /**
+     * Best-effort classifier: does this exception look like something that
+     * could succeed if we try again later? Two signals count as "yes":
+     *   1. Anything in the cause chain that looks like a connectivity problem
+     *      (IOException, *Timeout*, *UnknownHost*, *Connect*, *Network*).
+     *   2. A Gemini ServerException whose JSON body carries a retry-able
+     *      HTTP code (429, 5xx) or gRPC status (UNAVAILABLE, INTERNAL,
+     *      DEADLINE_EXCEEDED, RESOURCE_EXHAUSTED). The SDK puts the upstream
+     *      body straight into the exception message, so a substring check
+     *      against `t.message` works.
+     *
+     * Anything else — blocked client, parse failure, deserialization mismatch
+     * on a 4xx response — is treated as permanent so the worker doesn't loop
+     * forever and the UI shows the real error.
+     */
+    private fun isLikelyTransient(t: Throwable): Boolean {
+        var cur: Throwable? = t
+        while (cur != null) {
+            if (cur is java.io.IOException) return true
+            val name = cur::class.java.simpleName
+            if (name.contains("Timeout", ignoreCase = true) ||
+                name.contains("UnknownHost", ignoreCase = true) ||
+                name.contains("Connect", ignoreCase = true) ||
+                name.contains("Network", ignoreCase = true)
+            ) return true
+            val msg = cur.message.orEmpty()
+            if (TRANSIENT_STATUS_MARKERS.any { it in msg }) return true
+            if (TRANSIENT_HTTP_CODE.containsMatchIn(msg)) return true
+            cur = cur.cause
+        }
+        return false
     }
 
     /**
@@ -160,6 +206,17 @@ class OcrRepository(private val apiKey: String) {
 
     private companion object {
         const val TAG = "OcrRepository"
+
+        /** gRPC status strings Google returns for transient upstream errors. */
+        val TRANSIENT_STATUS_MARKERS = listOf(
+            "\"UNAVAILABLE\"",
+            "\"INTERNAL\"",
+            "\"DEADLINE_EXCEEDED\"",
+            "\"RESOURCE_EXHAUSTED\"",
+        )
+
+        /** HTTP codes worth retrying (rate limit + server-side failures). */
+        val TRANSIENT_HTTP_CODE = Regex("""["]code["]\s*:\s*(429|500|502|503|504)\b""")
 
         val IMAGE_PROMPT = """
             Analyze this receipt image. Return ONLY a JSON object (no prose, no markdown)
