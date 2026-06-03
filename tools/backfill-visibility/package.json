@@ -1,0 +1,14 @@
+{
+  "name": "strataspent-backfill-visibility",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "One-time backfill to stamp visibility=public on field-less expenditures.",
+  "scripts": {
+    "dry-run": "node backfill-visibility.mjs",
+    "apply": "node backfill-visibility.mjs --apply"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.0.0"
+  }
+}

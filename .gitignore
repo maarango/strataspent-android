@@ -74,6 +74,11 @@ secrets.properties
 .env.*
 !.env.example
 
+# Backfill tool: node deps + service-account keys (never commit credentials)
+node_modules/
+**/serviceAccount*.json
+**/*-service-account*.json
+
 # =========================================================
 # IDE / editor files
 # =========================================================
