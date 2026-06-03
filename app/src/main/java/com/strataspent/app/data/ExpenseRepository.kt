@@ -162,6 +162,14 @@ class ExpenseRepository(
         withTimeoutOrNull(3.seconds) { task.await() }
     }
 
+    /** Delete an expenditure. The Firestore rule only permits this when the
+     *  caller is the contributor (`contributorUid == auth.uid`), so the UI
+     *  must gate the action to the owner. */
+    suspend fun deleteExpenditure(groupId: String, expenseId: String) {
+        val task = expRef(groupId).document(expenseId).delete()
+        withTimeoutOrNull(3.seconds) { task.await() }
+    }
+
     /** Equal split with penny-accurate distribution. The web app stores
      *  amounts as floats; we round to 2 decimal places here so per-share
      *  values reconcile exactly to the total amount. */

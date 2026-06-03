@@ -20,8 +20,10 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -39,6 +41,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -73,7 +76,9 @@ fun AddExpenseScreen(
     val group by vm.group.collectAsStateWithLifecycle()
     val canonicalMembers by vm.canonicalMembers.collectAsStateWithLifecycle()
     val directory by vm.directory.collectAsStateWithLifecycle()
+    val canDelete by vm.canDelete.collectAsStateWithLifecycle()
 
+    var showDeleteDialog by remember { mutableStateOf(false) }
     var showScanSheet by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -125,6 +130,27 @@ fun AddExpenseScreen(
         if (state.saved) onSaved()
     }
 
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text(stringResource(R.string.expense_delete_title)) },
+            text = { Text(stringResource(R.string.expense_delete_message)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteDialog = false
+                        vm.deleteExpense()
+                    }
+                ) { Text(stringResource(R.string.expense_delete)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -139,6 +165,20 @@ fun AddExpenseScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                    }
+                },
+                actions = {
+                    // Only the contributor can delete (enforced by Firestore rule).
+                    if (vm.isEditing && canDelete) {
+                        IconButton(
+                            onClick = { showDeleteDialog = true },
+                            enabled = !state.loading,
+                        ) {
+                            Icon(
+                                Icons.Filled.Delete,
+                                contentDescription = stringResource(R.string.expense_delete),
+                            )
+                        }
                     }
                 },
             )

@@ -14,8 +14,10 @@ import com.strataspent.app.data.OcrRepository
 import com.strataspent.app.data.PendingOcrRepository
 import com.strataspent.app.data.UserDirectoryRepository
 import com.strataspent.app.data.canonicalDedupedMembers
+import com.strataspent.app.data.isOwnedBy
 import com.strataspent.app.data.todayIso
 import com.strataspent.app.data.model.Categories
+import com.strataspent.app.data.model.Expenditure
 import com.strataspent.app.data.model.Group
 import com.strataspent.app.data.model.UserProfile
 import com.strataspent.app.data.model.Visibility
@@ -105,6 +107,17 @@ class AddExpenseViewModel(
     private val _state = MutableStateFlow(AddExpenseUi())
     val state: StateFlow<AddExpenseUi> = _state.asStateFlow()
 
+    /** The loaded doc when editing (null while adding or before it loads).
+     *  Used to gate delete to the contributor, matching the Firestore rule. */
+    private val _loadedExpense = MutableStateFlow<Expenditure?>(null)
+
+    /** Only the contributor may delete (Firestore rule), so the delete button
+     *  is shown only when the viewer owns the loaded expense. */
+    val canDelete: StateFlow<Boolean> =
+        combine(_loadedExpense, me, directory) { exp, viewer, dir ->
+            exp != null && exp.isOwnedBy(viewer, dir)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
     init {
         if (expenseId != null) loadExisting(expenseId)
     }
@@ -112,6 +125,7 @@ class AddExpenseViewModel(
     private fun loadExisting(id: String) {
         viewModelScope.launch {
             expenseRepo.expenditure(groupId, id).first()?.let { e ->
+                _loadedExpense.value = e
                 _state.update {
                     it.copy(
                         category = e.category,
@@ -283,6 +297,21 @@ class AddExpenseViewModel(
             }.onFailure { t ->
                 _state.update { it.copy(loading = false, error = t.message ?: "Save failed") }
             }
+        }
+    }
+
+    /** Delete the expense being edited. Reuses `saved` to drive the same
+     *  navigate-back effect the save path uses. No-op when adding. */
+    fun deleteExpense() {
+        val id = expenseId ?: return
+        if (_state.value.loading) return
+        _state.update { it.copy(loading = true, error = null) }
+        viewModelScope.launch {
+            runCatching { expenseRepo.deleteExpenditure(groupId, id) }
+                .onSuccess { _state.update { it.copy(loading = false, saved = true) } }
+                .onFailure { t ->
+                    _state.update { it.copy(loading = false, error = t.message ?: "Delete failed") }
+                }
         }
     }
 }

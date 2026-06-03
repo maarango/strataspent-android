@@ -40,6 +40,9 @@
     <string name="expense_split_between">Split between</string>
     <string name="expense_save">Save</string>
     <string name="expense_save_changes">Save changes</string>
+    <string name="expense_delete">Delete</string>
+    <string name="expense_delete_title">Delete expenditure?</string>
+    <string name="expense_delete_message">This permanently removes the expense for everyone in the group. This can\'t be undone.</string>
 
     <!-- Add members -->
     <string name="members_add_title">Add members</string>
@@ -50,4 +53,5 @@
     <string name="sign_out">Sign out</string>
     <string name="error_generic">Something went wrong. Please try again.</string>
     <string name="action_back">Back</string>
+    <string name="action_cancel">Cancel</string>
 </resources>
