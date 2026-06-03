@@ -28,7 +28,7 @@ class ServiceLocator(application: Application) {
 
     val authRepo: AuthRepository = AuthRepository(auth, firestore)
     val groupRepo: GroupRepository = GroupRepository(firestore)
-    val expenseRepo: ExpenseRepository = ExpenseRepository(firestore)
+    val expenseRepo: ExpenseRepository = ExpenseRepository(firestore, auth)
     val userDirectory: UserDirectoryRepository = UserDirectoryRepository(firestore)
     val ocrRepo: OcrRepository = OcrRepository(BuildConfig.GEMINI_API_KEY)
     val remindersRepo: RemindersRepository = RemindersRepository(firestore)

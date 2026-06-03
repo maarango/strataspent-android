@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.strataspent.app.data.AuthRepository
 import com.strataspent.app.data.ExpenseRepository
 import com.strataspent.app.data.UserDirectoryRepository
+import com.strataspent.app.data.isOwnedBy
 import com.strataspent.app.data.model.Categories
 import com.strataspent.app.data.model.Expenditure
 import com.strataspent.app.data.model.PaymentType
@@ -95,19 +96,6 @@ class AnalyticsViewModel(
     }
 }
 
-/**
- * "Mine" matches by uid OR by an email lookup through the directory — so if
- * the same person has different Firebase Auth uids across providers
- * (Google vs email/password), their contributions still attribute correctly
- * to the viewer.
- */
-private fun isMine(e: Expenditure, viewer: UserProfile?, dir: Map<String, UserProfile>): Boolean {
-    if (viewer == null) return false
-    if (e.contributorUid == viewer.uid) return true
-    val contributorEmail = dir[e.contributorUid]?.email ?: return false
-    return contributorEmail.equals(viewer.email, ignoreCase = true) && viewer.email.isNotBlank()
-}
-
 private fun List<Expenditure>.toAnalytics(
     viewer: UserProfile?,
     directory: Map<String, UserProfile>,
@@ -120,7 +108,7 @@ private fun List<Expenditure>.toAnalytics(
     val groupSpending = filter {
         it.category != Categories.GLOBAL_INCOME && it.visibility != Visibility.PRIVATE
     }
-    val mine = filter { isMine(it, viewer, directory) }
+    val mine = filter { it.isOwnedBy(viewer, directory) }
     val mineSpending = mine.filter { it.category != Categories.GLOBAL_INCOME }
 
     val personal = PersonalFlow(

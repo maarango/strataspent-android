@@ -1,0 +1,115 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() { return request.auth != null; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+
+    // --- Group Validation ---
+    function isValidGroup(data) {
+      return data.keys().hasAll(['name', 'members', 'createdBy'])
+        && data.name is string && data.name.size() > 0
+        && data.members is list
+        && data.createdBy == request.auth.uid;
+    }
+
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == userId
+        && (
+          !incoming().keys().hasAny(['income']) ||
+          (incoming().income is number && incoming().income >= 0)
+        );
+    }
+
+    match /groups/{groupId} {
+      function isMember(members) {
+        return request.auth.uid in members || (request.auth.token.email != null && request.auth.token.email in members);
+      }
+
+      allow get: if isSignedIn() && isMember(existing().members);
+      allow list: if isSignedIn() && isMember(resource.data.members);
+
+      allow create: if isSignedIn() && isMember(incoming().members);
+
+      allow update: if isSignedIn()
+        && isMember(existing().members)
+        && (
+          // Action: Rename group
+          (incoming().diff(existing()).affectedKeys().hasOnly(['name']) && incoming().name is string) ||
+          // Action: Manage members (Anyone can invite, only creator can remove)
+          (incoming().diff(existing()).affectedKeys().hasOnly(['members']) && incoming().members is list && (
+            incoming().members.size() >= existing().members.size() ||
+            existing().createdBy == request.auth.uid
+          )) ||
+          // Action: Toggle Star
+          (incoming().diff(existing()).affectedKeys().hasOnly(['isStarred']) && incoming().isStarred is bool) ||
+          // Action: Update assignments
+          (incoming().diff(existing()).affectedKeys().hasOnly(['categoryAssignments']) && incoming().categoryAssignments is map) ||
+          // Action: Update category shares
+          (incoming().diff(existing()).affectedKeys().hasOnly(['categoryShares']) && incoming().categoryShares is map) ||
+          // Action: Update custom categories
+          (incoming().diff(existing()).affectedKeys().hasOnly(['customCategories']) && incoming().customCategories is list)
+        );
+
+      allow delete: if isSignedIn() && existing().createdBy == request.auth.uid;
+
+      function isGroupMember() {
+        let group = get(/databases/$(database)/documents/groups/$(groupId)).data;
+        return request.auth.uid in group.members || (request.auth.token.email != null && request.auth.token.email in group.members);
+      }
+
+      // --- Expenditures subcollection ---
+      match /expenditures/{expId} {
+        function isValidExpenditure(data) {
+          let required = ['category', 'amount', 'date', 'contributorName', 'contributorUid', 'note'];
+          return data.keys().hasAll(required)
+            && data.category in ['Housing', 'Food', 'Transport', 'Electricity', 'Internet', 'Phone', 'Gas', 'Entertainment', 'Health', 'Savings', 'Global Income', 'Settle Up', 'Credit Card Payment', 'Other']
+            && data.amount is number && data.amount >= 0
+            && data.date is string
+            && data.contributorUid == request.auth.uid
+            && (!data.keys().hasAny(['visibility']) || data.visibility in ['public', 'private']);
+        }
+
+        allow read: if isSignedIn() && isGroupMember()
+          && (
+            !resource.data.keys().hasAny(['visibility']) ||
+            resource.data.visibility == 'public' ||
+            resource.data.contributorUid == request.auth.uid
+          );
+        allow create: if isSignedIn() && isGroupMember() && isValidExpenditure(incoming());
+        allow update: if isSignedIn() && isGroupMember() && isValidExpenditure(incoming()) && existing().contributorUid == request.auth.uid;
+        allow delete: if isSignedIn() && isGroupMember() && resource.data.contributorUid == request.auth.uid;
+      }
+
+      // --- Reminders subcollection ---
+      match /reminders/{reminderId} {
+        function isValidReminder(data) {
+          return data.keys().hasAll(['title', 'dueDate', 'creatorUid', 'creatorName', 'isCompleted', 'createdAt'])
+            && data.title is string && data.title.size() > 0 && data.title.size() <= 200
+            && data.dueDate is string
+            && data.creatorUid == request.auth.uid
+            && data.isCompleted is bool
+            && (!data.keys().hasAny(['frequency']) || data.frequency in ['none', 'daily', 'weekly', 'monthly', 'yearly']);
+        }
+
+        allow read: if isSignedIn() && isGroupMember();
+        allow create: if isSignedIn() && isGroupMember() && isValidReminder(incoming());
+        allow update: if isSignedIn() && isGroupMember()
+          && (
+            (incoming().diff(existing()).affectedKeys().hasOnly(['isCompleted']) && incoming().isCompleted is bool) ||
+            (incoming().diff(existing()).affectedKeys().hasOnly(['isCompleted', 'dueDate']) && incoming().isCompleted is bool && incoming().dueDate is string) ||
+            (existing().creatorUid == request.auth.uid && isValidReminder(incoming()))
+          );
+        allow delete: if isSignedIn() && isGroupMember() && existing().creatorUid == request.auth.uid;
+      }
+    }
+  }
+}

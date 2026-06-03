@@ -1,14 +1,15 @@
 package com.strataspent.app.data
 
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
 import android.util.Log
 import com.strataspent.app.data.model.Categories
 import com.strataspent.app.data.model.Expenditure
 import com.strataspent.app.data.model.Group
 import com.strataspent.app.data.model.MemberBalance
 import com.strataspent.app.data.model.UserProfile
+import com.strataspent.app.data.model.Visibility
 import com.strataspent.app.data.model.canonicalMembers
 import com.strataspent.app.data.model.displayLabelFor
 import kotlinx.coroutines.channels.awaitClose
@@ -27,25 +28,68 @@ import kotlin.time.Duration.Companion.seconds
  * (note: the web app uses "expenditures", not "expenses"; we match that
  * here so both clients share data).
  */
-class ExpenseRepository(private val firestore: FirebaseFirestore) {
+class ExpenseRepository(
+    private val firestore: FirebaseFirestore,
+    private val auth: FirebaseAuth,
+) {
 
     private fun expRef(groupId: String) =
         firestore.collection("groups").document(groupId).collection("expenditures")
 
     fun expenditures(groupId: String): Flow<List<Expenditure>> = callbackFlow {
-        // Order by `date` rather than `createdAt`: `createdAt` is optional in
-        // the web schema, and Firestore's orderBy silently filters out docs
-        // missing the field — so older web-created expenditures wouldn't show
-        // up at all. `date` is required and sorts lexically as YYYY-MM-DD.
-        val reg = expRef(groupId)
-            .orderBy("date", Query.Direction.DESCENDING)
-            .addSnapshotListener { snap, err ->
-                if (err != null) {
-                    close(err); return@addSnapshotListener
-                }
-                trySend(snap?.documents?.mapNotNull { it.toExpenditure() } ?: emptyList())
+        // Security rules are NOT filters: with the visibility rule deployed, a
+        // single unconstrained query over a collection that holds other
+        // members' private docs is rejected outright. So we run two queries
+        // that each provably match only readable docs, and merge them:
+        //   • everyone's PUBLIC expenditures   (visibility == "public")
+        //   • all of MY OWN expenditures       (contributorUid == uid) — any visibility
+        // No orderBy here: an equality filter + orderBy on another field would
+        // force a composite index. We sort client-side after merging instead,
+        // by `date` DESC (required, lexical YYYY-MM-DD) — same order as before.
+        //
+        // Caveat: legacy docs written without a `visibility` field are treated
+        // as public by the rules but won't match `visibility == "public"`, so
+        // other members won't see them in the list (the owner still does, via
+        // the contributorUid query). New writes always set the field.
+        val uid = auth.currentUser?.uid
+        val col = expRef(groupId)
+        val lock = Any()
+        var publicDocs: List<Expenditure> = emptyList()
+        var myDocs: List<Expenditure> = emptyList()
+
+        fun emitMerged() {
+            val merged = synchronized(lock) {
+                (publicDocs + myDocs)
+                    .associateBy { it.id }            // dedupe my own public docs
+                    .values
+                    .sortedWith(
+                        compareByDescending<Expenditure> { it.date }.thenByDescending { it.id }
+                    )
             }
-        awaitClose { reg.remove() }
+            trySend(merged)
+        }
+
+        val regPublic = col.whereEqualTo("visibility", Visibility.PUBLIC)
+            .addSnapshotListener { snap, err ->
+                if (err != null) { close(err); return@addSnapshotListener }
+                synchronized(lock) {
+                    publicDocs = snap?.documents?.mapNotNull { it.toExpenditure() } ?: emptyList()
+                }
+                emitMerged()
+            }
+
+        val regMine = uid?.let {
+            col.whereEqualTo("contributorUid", it)
+                .addSnapshotListener { snap, err ->
+                    if (err != null) { close(err); return@addSnapshotListener }
+                    synchronized(lock) {
+                        myDocs = snap?.documents?.mapNotNull { d -> d.toExpenditure() } ?: emptyList()
+                    }
+                    emitMerged()
+                }
+        }
+
+        awaitClose { regPublic.remove(); regMine?.remove() }
     }
 
     fun expenditure(groupId: String, id: String): Flow<Expenditure?> = callbackFlow {
@@ -229,6 +273,30 @@ fun computeBalances(
         )
     }
 }
+
+/**
+ * True when [viewer] logged this expenditure. Matches by uid, or by email
+ * through the [directory] so the same person across providers (Google vs
+ * email/password, with different Firebase uids) still owns their own entry.
+ */
+fun Expenditure.isOwnedBy(
+    viewer: UserProfile?,
+    directory: Map<String, UserProfile> = emptyMap(),
+): Boolean {
+    if (viewer == null) return false
+    if (contributorUid == viewer.uid) return true
+    val contributorEmail = directory[contributorUid]?.email ?: return false
+    return viewer.email.isNotBlank() && contributorEmail.equals(viewer.email, ignoreCase = true)
+}
+
+/**
+ * A `visibility == "private"` expenditure is visible only to the member who
+ * logged it; everyone else must not see it. Public entries are visible to all.
+ */
+fun Expenditure.isVisibleTo(
+    viewer: UserProfile?,
+    directory: Map<String, UserProfile> = emptyMap(),
+): Boolean = visibility != Visibility.PRIVATE || isOwnedBy(viewer, directory)
 
 /** "YYYY-MM-DD" in UTC — matches the web app's `new Date().toISOString().slice(0,10)`. */
 fun todayIso(): String =

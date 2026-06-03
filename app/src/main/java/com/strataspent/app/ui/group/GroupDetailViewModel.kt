@@ -8,6 +8,7 @@ import com.strataspent.app.data.ExpenseRepository
 import com.strataspent.app.data.GroupRepository
 import com.strataspent.app.data.UserDirectoryRepository
 import com.strataspent.app.data.computeBalances
+import com.strataspent.app.data.isVisibleTo
 import com.strataspent.app.data.model.Expenditure
 import com.strataspent.app.data.model.Group
 import com.strataspent.app.data.model.MemberBalance
@@ -47,10 +48,14 @@ class GroupDetailViewModel(
         userDirectory.directory,
     ) { group, expenditures, viewer, dir ->
         if (group == null) return@combine GroupDetailUi()
+        // Hide other members' private expenditures from this viewer. Private
+        // entries split solely with their owner, so they net to zero in the
+        // balance fold — dropping them here keeps the list and balances aligned.
+        val visible = expenditures.filter { it.isVisibleTo(viewer, dir) }
         GroupDetailUi(
             group = group,
-            expenditures = expenditures,
-            balances = computeBalances(group, expenditures, viewer, dir),
+            expenditures = visible,
+            balances = computeBalances(group, visible, viewer, dir),
         )
     }.catch { t ->
         Log.w(TAG, "group detail flow error", t)
