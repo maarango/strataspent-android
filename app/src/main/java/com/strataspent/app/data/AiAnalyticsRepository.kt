@@ -44,6 +44,11 @@ class AiAnalyticsRepository(private val apiKey: String) {
         /** Personal scope only: debit / credit tagged spending, or null. */
         val debitSpending: Double? = null,
         val creditSpending: Double? = null,
+        /** Personal scope only: public (shared) vs private spending split. The
+         *  two sum to [grandTotal]; private entries are hidden from other group
+         *  members and don't move group balances. Null in the group scope. */
+        val publicSpending: Double? = null,
+        val privateSpending: Double? = null,
     )
 
     suspend fun analyze(summary: FinancialSummary): Result = withContext(Dispatchers.IO) {
@@ -64,9 +69,13 @@ class AiAnalyticsRepository(private val apiKey: String) {
         val cur = s.currencyCode?.let { " (amounts are in $it)" } ?: ""
         val cats = s.byCategory.joinToString("\n") { "  - ${it.first}: ${money(it.second)}" }
         val months = s.byMonth.joinToString("\n") { "  - ${it.first}: ${money(it.second)}" }
+        // Public/private only matter in the personal ("You") scope.
+        val hasPrivacySplit = s.publicSpending != null || s.privateSpending != null
         val personal = buildString {
             s.monthlyRecurringIncome?.let { appendLine("Monthly recurring income: ${money(it)}") }
             s.incomeInRange?.takeIf { it > 0 }?.let { appendLine("One-off income logged in range: ${money(it)}") }
+            s.publicSpending?.let { appendLine("Public (shared) spending: ${money(it)}") }
+            s.privateSpending?.let { appendLine("Private (hidden from the group) spending: ${money(it)}") }
             s.debitSpending?.takeIf { it > 0 }?.let { appendLine("Debit-tagged spending: ${money(it)}") }
             s.creditSpending?.takeIf { it > 0 }?.let { appendLine("Credit-tagged spending: ${money(it)}") }
         }.trim()
@@ -90,6 +99,9 @@ class AiAnalyticsRepository(private val apiKey: String) {
             appendLine("- Write for the user directly, in their everyday language; respond in the same language the category names suggest, otherwise English.")
             appendLine("- Be concise: ~150-220 words total.")
             appendLine("- Cover: where the money goes (top categories), the month-over-month trend (rising/falling/steady), and anything notable or anomalous.")
+            if (hasPrivacySplit) {
+                appendLine("- This is the user's own spending and includes BOTH public (shared with the group) and private (hidden) expenses. Address both: how the total splits between public and private, and whether private spending is a large share worth their attention.")
+            }
             appendLine("- End with 2-4 concrete, actionable recommendations as a bulleted list starting with \"- \".")
             appendLine("- Use ONLY the numbers above; never invent transactions or figures. Quote amounts with the currency.")
             appendLine("- Plain text only (short paragraphs and \"- \" bullets). No markdown headers, tables, or code blocks.")
