@@ -16,11 +16,18 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
@@ -29,6 +36,7 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -50,6 +58,8 @@ fun AnalyticsScreen(
     onBack: () -> Unit,
 ) {
     val ui by vm.ui.collectAsStateWithLifecycle()
+    val aiState by vm.aiState.collectAsStateWithLifecycle()
+    val currencyCode = LocalCurrencyCode.current
 
     Scaffold(
         topBar = {
@@ -104,6 +114,14 @@ fun AnalyticsScreen(
         ) {
             item { ModeSelector(mode = mode, onChange = { mode = it }) }
             item { SummaryCard(scope = scope, mode = mode) }
+            item {
+                AiAnalysisCard(
+                    state = aiState,
+                    mode = mode,
+                    onRange = vm::setAnalysisRange,
+                    onGenerate = { vm.generateAiAnalysis(mode, currencyCode) },
+                )
+            }
             item {
                 PersonalFlowCard(
                     p = ui.personal,
@@ -212,6 +230,100 @@ private fun FlowRow(label: String, value: Double, positive: Boolean) {
             color = if (positive) MaterialTheme.colorScheme.tertiary
             else MaterialTheme.colorScheme.onSurface,
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AiAnalysisCard(
+    state: AiAnalysisUi,
+    mode: AnalyticsMode,
+    onRange: (AnalysisRange) -> Unit,
+    onGenerate: () -> Unit,
+) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Text("AI financial analysis", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "An AI read of ${if (mode == AnalyticsMode.GROUP) "the group's" else "your"} " +
+                    "spending over the chosen period — patterns, trends, and tips. " +
+                    "Uses cloud AI; needs internet.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(12.dp))
+
+            RangeDropdown(selected = state.range, enabled = !state.loading, onSelect = onRange)
+            Spacer(Modifier.height(12.dp))
+
+            Button(
+                onClick = onGenerate,
+                enabled = !state.loading,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                if (state.loading) {
+                    CircularProgressIndicator(
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.size(8.dp))
+                    Text("Analyzing…")
+                } else {
+                    Text(if (state.analysis == null) "Generate analysis" else "Regenerate")
+                }
+            }
+
+            if (state.error != null) {
+                Spacer(Modifier.height(12.dp))
+                Text(state.error, color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium)
+            }
+            if (state.analysis != null && !state.loading) {
+                Spacer(Modifier.height(12.dp))
+                HorizontalDivider()
+                Spacer(Modifier.height(12.dp))
+                Text(state.analysis, style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun RangeDropdown(
+    selected: AnalysisRange,
+    enabled: Boolean,
+    onSelect: (AnalysisRange) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { if (enabled) expanded = it },
+    ) {
+        OutlinedTextField(
+            value = selected.label,
+            onValueChange = {},
+            readOnly = true,
+            enabled = enabled,
+            label = { Text("Analysis period") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor(MenuAnchorType.PrimaryNotEditable),
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            AnalysisRange.entries.forEach { range ->
+                DropdownMenuItem(
+                    text = { Text(range.label) },
+                    onClick = {
+                        onSelect(range)
+                        expanded = false
+                    },
+                )
+            }
+        }
     }
 }
 
