@@ -13,8 +13,11 @@ import com.strataspent.app.data.model.Expenditure
 import com.strataspent.app.data.model.Group
 import com.strataspent.app.data.model.MemberBalance
 import com.strataspent.app.data.model.UserProfile
+import com.strataspent.app.data.todayIso
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.onEach
@@ -38,6 +41,16 @@ class GroupDetailViewModel(
 
     val me: StateFlow<UserProfile?> = authRepo.currentUser
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** The day whose expenditures the list is showing (YYYY-MM-DD). Defaults to
+     *  today; the calendar on the detail screen updates it. Balances always
+     *  reflect ALL expenses, so only the list is date-scoped. */
+    private val _selectedDate = MutableStateFlow(todayIso())
+    val selectedDate: StateFlow<String> = _selectedDate.asStateFlow()
+
+    fun selectDate(iso: String) {
+        if (iso.isNotBlank()) _selectedDate.value = iso
+    }
 
     val ui: StateFlow<GroupDetailUi> = combine(
         groupRepo.group(groupId)

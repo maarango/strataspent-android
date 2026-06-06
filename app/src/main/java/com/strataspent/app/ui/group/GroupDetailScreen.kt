@@ -19,6 +19,8 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material3.Card
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
@@ -28,9 +30,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -40,8 +45,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.strataspent.app.R
 import com.strataspent.app.data.model.Expenditure
 import com.strataspent.app.data.model.MemberBalance
+import com.strataspent.app.data.todayIso
 import com.strataspent.app.ui.LocalCurrencyCode
 import com.strataspent.app.ui.formatMoney as appFormatMoney
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,7 +66,25 @@ fun GroupDetailScreen(
     onEditGroup: () -> Unit,
 ) {
     val ui by vm.ui.collectAsStateWithLifecycle()
+    val selectedDate by vm.selectedDate.collectAsStateWithLifecycle()
     val group = ui.group
+
+    // Inline calendar state, seeded from the selected day. User taps flow back
+    // into the view-model via the LaunchedEffect below (one-way: picker → VM).
+    val dateState = rememberDatePickerState(
+        initialSelectedDateMillis = isoToUtcMillis(selectedDate)
+    )
+    LaunchedEffect(dateState.selectedDateMillis) {
+        dateState.selectedDateMillis?.let { millis ->
+            val iso = utcMillisToIso(millis)
+            if (iso != selectedDate) vm.selectDate(iso)
+        }
+    }
+
+    // Only the selected day's expenses appear in the list (balances stay all-time).
+    val dayExpenses = remember(ui.expenditures, selectedDate) {
+        ui.expenditures.filter { it.date == selectedDate }
+    }
 
     Scaffold(
         topBar = {
@@ -116,22 +144,51 @@ fun GroupDetailScreen(
             item { Spacer(Modifier.height(4.dp)) }
 
             item {
-                Text(
-                    stringResource(R.string.group_expenses),
-                    style = MaterialTheme.typography.titleMedium,
-                )
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        stringResource(R.string.group_expenses),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        if (selectedDate == todayIso()) "Today · ${prettyDate(selectedDate)}"
+                        else prettyDate(selectedDate),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
-            if (ui.expenditures.isEmpty()) {
+            if (dayExpenses.isEmpty()) {
                 item {
                     Text(
-                        stringResource(R.string.group_expenses_empty),
+                        "No expenses on this day.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             } else {
-                items(ui.expenditures, key = { it.id }) { e ->
+                items(dayExpenses, key = { it.id }) { e ->
                     ExpenseRow(e, onClick = { onEditExpense(e.id) })
+                }
+            }
+
+            // Calendar: pick a day to view/edit its expenses.
+            item { Spacer(Modifier.height(12.dp)) }
+            item { HorizontalDivider() }
+            item {
+                Card(Modifier.fillMaxWidth()) {
+                    DatePicker(
+                        state = dateState,
+                        title = null,
+                        headline = null,
+                        showModeToggle = false,
+                        colors = DatePickerDefaults.colors(
+                            containerColor = MaterialTheme.colorScheme.surface,
+                        ),
+                    )
                 }
             }
         }
@@ -206,3 +263,24 @@ private fun ExpenseRow(e: Expenditure, onClick: () -> Unit) {
 @androidx.compose.runtime.Composable
 private fun formatMoney(value: Double): String =
     appFormatMoney(value, LocalCurrencyCode.current)
+
+// --- date <-> calendar conversion -----------------------------------------
+// Expenditure dates are "yyyy-MM-dd" strings; the Material DatePicker speaks
+// UTC-midnight millis. We parse/format with a fixed UTC zone on both sides so
+// the day label round-trips identically regardless of the device timezone.
+
+private fun utcFormat(pattern: String): SimpleDateFormat =
+    SimpleDateFormat(pattern, Locale.getDefault()).apply {
+        timeZone = TimeZone.getTimeZone("UTC")
+    }
+
+private fun isoToUtcMillis(iso: String): Long? =
+    runCatching { utcFormat("yyyy-MM-dd").parse(iso)?.time }.getOrNull()
+
+private fun utcMillisToIso(millis: Long): String =
+    utcFormat("yyyy-MM-dd").format(Date(millis))
+
+/** "Mon, Jun 5" for the section header. */
+private fun prettyDate(iso: String): String =
+    runCatching { utcFormat("yyyy-MM-dd").parse(iso) }.getOrNull()
+        ?.let { utcFormat("EEE, MMM d").format(it) } ?: iso
