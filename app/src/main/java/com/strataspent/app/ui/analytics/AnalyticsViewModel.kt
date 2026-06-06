@@ -213,6 +213,10 @@ class AnalyticsViewModel(
                 else mine.filter { it.category == Categories.GLOBAL_INCOME }.sumOf { it.amount },
             debitSpending = if (isGroup) null else scoped.filter { it.paymentType == PaymentType.DEBIT }.sumOf { it.amount },
             creditSpending = if (isGroup) null else scoped.filter { it.paymentType == PaymentType.CREDIT }.sumOf { it.amount },
+            // "You" already includes private entries in grandTotal; split them
+            // out so the model can analyze public and private spending distinctly.
+            publicSpending = if (isGroup) null else scoped.filter { it.visibility != Visibility.PRIVATE }.sumOf { it.amount },
+            privateSpending = if (isGroup) null else scoped.filter { it.visibility == Visibility.PRIVATE }.sumOf { it.amount },
         )
     }
 }
