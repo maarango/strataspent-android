@@ -3,6 +3,7 @@ package com.strataspent.app
 import android.app.Application
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.strataspent.app.data.AiAnalyticsRepository
 import com.strataspent.app.data.AuthRepository
 import com.strataspent.app.data.ExpenseRepository
 import com.strataspent.app.data.GroupRepository
@@ -31,6 +32,7 @@ class ServiceLocator(application: Application) {
     val expenseRepo: ExpenseRepository = ExpenseRepository(firestore, auth)
     val userDirectory: UserDirectoryRepository = UserDirectoryRepository(firestore)
     val ocrRepo: OcrRepository = OcrRepository(BuildConfig.GEMINI_API_KEY)
+    val aiAnalyticsRepo: AiAnalyticsRepository = AiAnalyticsRepository(BuildConfig.GEMINI_API_KEY)
     val remindersRepo: RemindersRepository = RemindersRepository(firestore)
     val languagePref: LanguagePreference = LanguagePreference(application)
     val pendingOcr: PendingOcrRepository = PendingOcrRepository(application)

@@ -81,6 +81,7 @@ class StrataViewModelFactory(
                 authRepo = locator.authRepo,
                 expenseRepo = locator.expenseRepo,
                 userDirectory = locator.userDirectory,
+                aiAnalyticsRepo = locator.aiAnalyticsRepo,
             )
             SettingsViewModel::class.java -> SettingsViewModel(
                 authRepo = locator.authRepo,

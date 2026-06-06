@@ -3,6 +3,7 @@ package com.strataspent.app.ui.analytics
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.strataspent.app.data.AiAnalyticsRepository
 import com.strataspent.app.data.AuthRepository
 import com.strataspent.app.data.ExpenseRepository
 import com.strataspent.app.data.UserDirectoryRepository
@@ -12,14 +13,20 @@ import com.strataspent.app.data.model.Expenditure
 import com.strataspent.app.data.model.PaymentType
 import com.strataspent.app.data.model.UserProfile
 import com.strataspent.app.data.model.Visibility
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.util.Calendar
+import java.util.Locale
+import java.util.TimeZone
 
 data class CategoryBar(val category: String, val total: Double)
 data class CashflowPoint(val date: String, val total: Double)
@@ -53,11 +60,38 @@ data class AnalyticsUi(
     val personal: PersonalFlow = PersonalFlow(),
 )
 
+/** How far back the AI analysis looks. [months] == null means all history. */
+enum class AnalysisRange(val label: String, val months: Int?) {
+    ONE_MONTH("Last month", 1),
+    THREE_MONTHS("Last 3 months", 3),
+    SIX_MONTHS("Last 6 months", 6),
+    ONE_YEAR("Last year", 12),
+    ALL("All history", null);
+
+    /** Inclusive lower-bound "yyyy-MM-dd", or null for all history. */
+    fun cutoffIso(): String? {
+        val m = months ?: return null
+        val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply { add(Calendar.MONTH, -m) }
+        return "%04d-%02d-%02d".format(
+            cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.DAY_OF_MONTH),
+        )
+    }
+}
+
+/** UI state for the AI financial-analysis card. */
+data class AiAnalysisUi(
+    val range: AnalysisRange = AnalysisRange.THREE_MONTHS,
+    val loading: Boolean = false,
+    val analysis: String? = null,
+    val error: String? = null,
+)
+
 class AnalyticsViewModel(
     val groupId: String,
     private val authRepo: AuthRepository,
-    expenseRepo: ExpenseRepository,
+    private val expenseRepo: ExpenseRepository,
     private val userDirectory: UserDirectoryRepository,
+    private val aiAnalyticsRepo: AiAnalyticsRepository,
 ) : ViewModel() {
 
     val ui: StateFlow<AnalyticsUi> = combine(
@@ -93,6 +127,93 @@ class AnalyticsViewModel(
             runCatching { userDirectory.setIncome(uid, amount) }
                 .onFailure { Log.w("AnalyticsVM", "income update failed", it) }
         }
+    }
+
+    // ---- AI financial analysis ---------------------------------------------
+
+    private val _aiState = MutableStateFlow(AiAnalysisUi())
+    val aiState: StateFlow<AiAnalysisUi> = _aiState.asStateFlow()
+
+    fun setAnalysisRange(range: AnalysisRange) {
+        _aiState.value = _aiState.value.copy(range = range)
+    }
+
+    /**
+     * Generate a natural-language analysis of the selected scope ([mode]) over
+     * the chosen [AiAnalysisUi.range]. Filters the raw expenditures by date so
+     * the model sees exactly the window the user picked.
+     */
+    fun generateAiAnalysis(mode: AnalyticsMode, currencyCode: String?) {
+        val range = _aiState.value.range
+        _aiState.value = _aiState.value.copy(loading = true, error = null)
+        viewModelScope.launch {
+            runCatching {
+                val exps = expenseRepo.expenditures(groupId).first()
+                val viewer = authRepo.currentUser.first()
+                val dir = userDirectory.directory.value
+                val cutoff = range.cutoffIso()
+                val inRange = if (cutoff == null) exps
+                    else exps.filter { it.date.isNotBlank() && it.date >= cutoff }
+                aiAnalyticsRepo.analyze(buildSummary(inRange, viewer, dir, mode, range, currencyCode))
+            }.onSuccess { result ->
+                _aiState.value = when (result) {
+                    is AiAnalyticsRepository.Result.NotConfigured -> _aiState.value.copy(
+                        loading = false, analysis = null,
+                        error = "AI isn't configured. Set geminiApiKey in local.properties.",
+                    )
+                    is AiAnalyticsRepository.Result.Failure -> _aiState.value.copy(
+                        loading = false, analysis = null, error = result.message,
+                    )
+                    is AiAnalyticsRepository.Result.Success -> _aiState.value.copy(
+                        loading = false, analysis = result.analysis, error = null,
+                    )
+                }
+            }.onFailure { t ->
+                Log.w("AnalyticsVM", "ai analysis error", t)
+                _aiState.value = _aiState.value.copy(loading = false, error = t.message ?: "Analysis failed")
+            }
+        }
+    }
+
+    private fun buildSummary(
+        exps: List<Expenditure>,
+        viewer: UserProfile?,
+        dir: Map<String, UserProfile>,
+        mode: AnalyticsMode,
+        range: AnalysisRange,
+        currencyCode: String?,
+    ): AiAnalyticsRepository.FinancialSummary {
+        val isGroup = mode == AnalyticsMode.GROUP
+        // Match the same scoping the charts use (see toAnalytics()).
+        val scoped = if (isGroup) {
+            exps.filter { it.category != Categories.GLOBAL_INCOME && it.visibility != Visibility.PRIVATE }
+        } else {
+            exps.filter { it.isOwnedBy(viewer, dir) && it.category != Categories.GLOBAL_INCOME }
+        }
+        val byCategory = scoped.groupBy { it.category }
+            .mapValues { (_, l) -> l.sumOf { it.amount } }
+            .entries.sortedByDescending { it.value }.map { it.key to it.value }
+        val byMonth = scoped.filter { it.date.length >= 7 }
+            .groupBy { it.date.substring(0, 7) }
+            .mapValues { (_, l) -> l.sumOf { it.amount } }
+            .entries.sortedBy { it.key }.map { it.key to it.value }
+
+        val mine = if (!isGroup) exps.filter { it.isOwnedBy(viewer, dir) } else emptyList()
+        return AiAnalyticsRepository.FinancialSummary(
+            scopeLabel = if (isGroup) "the group's shared spending" else "your personal spending",
+            rangeLabel = if (range.months == null) "all available history"
+                else "the ${range.label.lowercase(Locale.US)}",
+            currencyCode = currencyCode,
+            expenditureCount = scoped.size,
+            grandTotal = scoped.sumOf { it.amount },
+            byCategory = byCategory,
+            byMonth = byMonth,
+            monthlyRecurringIncome = if (isGroup) null else (viewer?.let { dir[it.uid]?.income } ?: 0.0),
+            incomeInRange = if (isGroup) null
+                else mine.filter { it.category == Categories.GLOBAL_INCOME }.sumOf { it.amount },
+            debitSpending = if (isGroup) null else scoped.filter { it.paymentType == PaymentType.DEBIT }.sumOf { it.amount },
+            creditSpending = if (isGroup) null else scoped.filter { it.paymentType == PaymentType.CREDIT }.sumOf { it.amount },
+        )
     }
 }
 
