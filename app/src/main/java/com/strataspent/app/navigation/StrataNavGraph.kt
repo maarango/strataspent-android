@@ -30,6 +30,8 @@ import com.strataspent.app.ui.groups.GroupListScreen
 import com.strataspent.app.ui.groups.GroupListViewModel
 import com.strataspent.app.ui.analytics.AnalyticsScreen
 import com.strataspent.app.ui.analytics.AnalyticsViewModel
+import com.strataspent.app.ui.settings.GemmaModelScreen
+import com.strataspent.app.ui.settings.GemmaModelViewModel
 import com.strataspent.app.ui.settings.SettingsScreen
 import com.strataspent.app.ui.settings.SettingsViewModel
 import com.strataspent.app.ui.split.SplitBillScreen
@@ -52,6 +54,7 @@ object Routes {
     const val EDIT_REMINDER = "groups/{groupId}/reminders/{reminderId}/edit"
     const val ANALYTICS = "groups/{groupId}/analytics"
     const val SETTINGS = "settings"
+    const val OFFLINE_AI = "settings/offline-ai"
     const val SPLIT_BILL = "split-bill"
     const val EDIT_GROUP = "groups/{groupId}/edit"
 
@@ -107,7 +110,16 @@ fun StrataNavGraph(locator: ServiceLocator) {
 
         composable(Routes.SETTINGS) {
             val vm: SettingsViewModel = viewModel(factory = factory)
-            SettingsScreen(vm = vm, onBack = { navController.popBackStack() })
+            SettingsScreen(
+                vm = vm,
+                onBack = { navController.popBackStack() },
+                onOpenOfflineAi = { navController.navigate(Routes.OFFLINE_AI) },
+            )
+        }
+
+        composable(Routes.OFFLINE_AI) {
+            val vm: GemmaModelViewModel = viewModel(factory = factory)
+            GemmaModelScreen(vm = vm, onBack = { navController.popBackStack() })
         }
 
         composable(Routes.SPLIT_BILL) {

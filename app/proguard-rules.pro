@@ -13,6 +13,14 @@
 -keep class com.google.ai.client.generativeai.** { *; }
 -keep class com.google.ai.client.generativeai.type.** { *; }
 
+# ─── MediaPipe / Google AI Edge (on-device Gemma via tasks-genai) ─────────
+# Loads native libs + JNI/proto classes reflectively; keep them intact.
+-keep class com.google.mediapipe.** { *; }
+-keep class com.google.mediapipe.tasks.genai.** { *; }
+-keep class com.google.protobuf.** { *; }
+-dontwarn com.google.mediapipe.**
+-dontwarn com.google.protobuf.**
+
 # ─── WorkManager workers (instantiated reflectively) ──────────────────────
 -keep class * extends androidx.work.ListenableWorker
 -keep class * extends androidx.work.CoroutineWorker

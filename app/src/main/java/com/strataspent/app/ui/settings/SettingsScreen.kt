@@ -19,7 +19,9 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.OfflineBolt
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.Card
@@ -60,6 +62,7 @@ import kotlinx.coroutines.withContext
 fun SettingsScreen(
     vm: SettingsViewModel,
     onBack: () -> Unit,
+    onOpenOfflineAi: () -> Unit = {},
 ) {
     val user by vm.user.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -279,6 +282,36 @@ fun SettingsScreen(
                         },
                         modifier = Modifier.fillMaxWidth(),
                     ) { Text("Open system Language settings (Option B)") }
+                }
+            }
+
+            SectionTitle("Offline AI")
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp)) {
+                    Row(
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Icon(Icons.Filled.OfflineBolt, contentDescription = null)
+                        Text("On-device model (Gemma)", style = MaterialTheme.typography.titleSmall)
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Optionally download a Gemma model that runs entirely on your phone. " +
+                            "When you're offline, scanning receipts or dictating expenses uses it " +
+                            "instead of queuing for the cloud — nothing leaves the device.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = onOpenOfflineAi,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Set up offline AI")
+                        Spacer(Modifier.weight(1f))
+                        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null)
+                    }
                 }
             }
 
