@@ -5,6 +5,9 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.strataspent.app.data.AuthRepository
 import com.strataspent.app.data.ExpenseRepository
+import com.strataspent.app.data.GemmaExpenseExtractor
+import com.strataspent.app.data.GemmaModelManager
+import com.strataspent.app.data.GemmaPreferences
 import com.strataspent.app.data.GroupRepository
 import com.strataspent.app.data.LanguagePreference
 import com.strataspent.app.data.OcrProcessingWorker
@@ -34,6 +37,12 @@ class ServiceLocator(application: Application) {
     val remindersRepo: RemindersRepository = RemindersRepository(firestore)
     val languagePref: LanguagePreference = LanguagePreference(application)
     val pendingOcr: PendingOcrRepository = PendingOcrRepository(application)
+
+    // Optional on-device Gemma (offline AI fallback for expense capture).
+    val gemmaPrefs: GemmaPreferences = GemmaPreferences(application)
+    val gemmaModelManager: GemmaModelManager = GemmaModelManager(application)
+    val gemmaExtractor: GemmaExpenseExtractor =
+        GemmaExpenseExtractor(application, gemmaPrefs, gemmaModelManager)
 
     private companion object {
         const val FIRESTORE_DB_ID = "ai-studio-6193fa2f-201b-4627-bfb4-124dbca4a1c2"

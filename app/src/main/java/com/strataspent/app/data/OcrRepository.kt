@@ -5,7 +5,6 @@ import android.util.Log
 import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.content
 import com.google.ai.client.generativeai.type.generationConfig
-import com.strataspent.app.data.model.Categories
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -59,10 +58,10 @@ class OcrRepository(private val apiKey: String) {
             val response = model.generateContent(
                 content {
                     image(image)
-                    text(IMAGE_PROMPT)
+                    text(ExpenseExtraction.IMAGE_PROMPT)
                 }
             )
-            parse(response.text.orEmpty())
+            wrapParse(response.text.orEmpty())
         }.getOrElse { t ->
             Log.w(TAG, "Gemini OCR failed", t)
             OcrResult.Failure(t.message ?: "OCR failed", retryable = isLikelyTransient(t))
@@ -78,12 +77,10 @@ class OcrRepository(private val apiKey: String) {
                 "Empty transcript", retryable = false,
             )
             val model = newModel()
-            val prompt = VOICE_PROMPT_TEMPLATE
-                .replace("{TODAY}", todayIso)
-                .replace("{TRANSCRIPT}", transcript.replace("\"", "'"))
+            val prompt = ExpenseExtraction.voicePrompt(todayIso, transcript)
             runCatching {
                 val response = model.generateContent(content { text(prompt) })
-                parse(response.text.orEmpty())
+                wrapParse(response.text.orEmpty())
             }.getOrElse { t ->
                 Log.w(TAG, "Voice → expense parse failed", t)
                 OcrResult.Failure(t.message ?: "Voice parse failed", retryable = isLikelyTransient(t))
@@ -117,7 +114,7 @@ class OcrRepository(private val apiKey: String) {
 
     private fun parseLineItems(raw: String): LineItemsResult {
         if (raw.isBlank()) return LineItemsResult.Failure("Empty Gemini response")
-        val jsonText = extractJsonObject(raw)
+        val jsonText = ExpenseExtraction.extractJsonObject(raw)
             ?: return LineItemsResult.Failure("No JSON object in reply: ${raw.take(160)}")
         return try {
             val json = JSONObject(jsonText)
@@ -136,29 +133,14 @@ class OcrRepository(private val apiKey: String) {
         }
     }
 
-    private fun parse(raw: String): OcrResult {
-        // We got past the HTTP call to reach this function, so any failure here
-        // is a response-shape problem, not a network one — retrying won't help.
-        if (raw.isBlank()) return OcrResult.Failure("Empty Gemini response", retryable = false)
-        val jsonText = extractJsonObject(raw)
-            ?: return OcrResult.Failure(
-                "No JSON object in Gemini reply: ${raw.take(160).replace('\n', ' ')}",
-                retryable = false,
-            )
-        return try {
-            val json = JSONObject(jsonText)
-            OcrResult.Success(
-                category = json.optString("category").ifBlank { null }
-                    ?.let { c -> Categories.ALL.firstOrNull { it.equals(c, true) } ?: Categories.OTHER },
-                amount = json.optDouble("amount").takeIf { !it.isNaN() && it > 0 },
-                date = json.optString("date").ifBlank { null },
-                note = json.optString("note").ifBlank { null },
-            )
-        } catch (t: Throwable) {
-            Log.w(TAG, "OCR JSON parse failed for: $jsonText", t)
-            OcrResult.Failure("Couldn't read Gemini response as JSON", retryable = false)
-        }
-    }
+    /**
+     * Wrap the shared parser into an [OcrResult]. We got past the HTTP call to
+     * reach here, so a parse miss is a response-shape problem, not a network
+     * one — retrying won't help, hence `retryable = false`.
+     */
+    private fun wrapParse(raw: String): OcrResult =
+        ExpenseExtraction.parse(raw)
+            ?: OcrResult.Failure("Couldn't read Gemini response as JSON", retryable = false)
 
     /**
      * Best-effort classifier: does this exception look like something that
@@ -193,17 +175,6 @@ class OcrRepository(private val apiKey: String) {
         return false
     }
 
-    /**
-     * Pulls the first balanced `{...}` object out of an arbitrary string.
-     * Tolerates markdown fences and stray prose that Gemini sometimes adds
-     * even when asked for JSON-only output.
-     */
-    private fun extractJsonObject(raw: String): String? {
-        val start = raw.indexOf('{')
-        val end = raw.lastIndexOf('}')
-        return if (start in 0 until end) raw.substring(start, end + 1).trim() else null
-    }
-
     private companion object {
         const val TAG = "OcrRepository"
 
@@ -217,66 +188,6 @@ class OcrRepository(private val apiKey: String) {
 
         /** HTTP codes worth retrying (rate limit + server-side failures). */
         val TRANSIENT_HTTP_CODE = Regex("""["]code["]\s*:\s*(429|500|502|503|504)\b""")
-
-        val IMAGE_PROMPT = """
-            Analyze this receipt image. Return ONLY a JSON object (no prose, no markdown)
-            with these fields:
-
-            {
-              "category": one of ${Categories.ALL.joinToString(prefix = "[", postfix = "]") { "\"$it\"" }},
-              "amount": total amount in dollars as a number (no currency symbol),
-              "date": purchase date as "YYYY-MM-DD",
-              "note": short description (vendor name or 3–6 word summary)
-            }
-
-            If a field can't be determined, use null.
-        """.trimIndent()
-
-        val VOICE_PROMPT_TEMPLATE = """
-            The user described an expense out loud in their own language
-            (English, Spanish, Portuguese, French — anything). Parse it into a
-            structured expense. Today is {TODAY}.
-
-            Return ONLY a JSON object (no prose, no markdown):
-
-            {
-              "category": one of ${Categories.ALL.joinToString(prefix = "[", postfix = "]") { "\"$it\"" }}
-                  Translate from the user's language. Examples:
-                    - "comida"/"alimentos"/"groceries"/"supermercado"/"mercado" → "Food"
-                    - "renta"/"alquiler"/"casa"/"hipoteca" → "Housing"
-                    - "gasolina"/"nafta"/"combustible" → "Transport" (use "Gas" if the user means heating gas)
-                    - "luz"/"electricidad" → "Electricity"
-                    - "internet"/"wifi" → "Internet"
-                    - "teléfono"/"celular"/"phone" → "Phone"
-                    - "salud"/"médico"/"farmacia" → "Health"
-                    - "entretenimiento"/"diversión"/"cine"/"restaurante" → "Entertainment"
-                    - "ahorro"/"savings" → "Savings"
-                    - "ingreso"/"salario"/"sueldo"/"income" → "Global Income"
-                    - "pago tarjeta"/"credit card payment" → "Credit Card Payment"
-                    - anything else → "Other",
-              "amount": the numerical amount as a plain number, no symbol or units.
-                  Convert spelled-out numbers in any language to digits.
-                  Examples: "twenty"→20, "veinte"→20, "fifty"→50, "cincuenta"→50,
-                  "two hundred"→200, "doscientos"→200,
-                  "veinticinco mil"→25000, "twenty-five thousand"→25000,
-                  "treinta y cinco"→35, "1.5 million"→1500000.
-                  If the user says a currency keep the number only (drop "pesos"/"dollars"/"euros"/"reales"),
-              "date": "YYYY-MM-DD" relative to today.
-                  Interpret natural-language dates in any language:
-                    "ayer"/"yesterday" → today minus 1 day,
-                    "hoy"/"today" → today,
-                    "anteayer"/"day before yesterday" → today minus 2,
-                    "el lunes pasado"/"last Monday" → most recent Monday,
-                    "el 15 de marzo" → 2026-03-15 if year unspecified use current year.
-                  Default to today if no date stated,
-              "note": short description in the user's original language (3–6 words; vendor, item, or context)
-            }
-
-            Use null for any field you genuinely cannot determine — but always
-            try hard for "amount", since spelled-out numbers are very common.
-
-            User said: "{TRANSCRIPT}"
-        """.trimIndent()
 
         val LINE_ITEMS_PROMPT = """
             Analyze this receipt image. Extract every line item (food, drink,

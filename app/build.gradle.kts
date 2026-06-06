@@ -49,6 +49,17 @@ android {
             ?: System.getenv("GEMINI_API_KEY")
             ?: ""
         buildConfigField("String", "GEMINI_API_KEY", "\"$geminiKey\"")
+
+        // Hugging Face token for downloading the (gated) on-device Gemma
+        // weights. Set via local.properties (hfToken=...), the hfToken gradle
+        // property, or the HF_TOKEN env var. Empty by default — the offline-AI
+        // download screen then asks the user to paste their own token (or they
+        // can sideload a model file via the Import button, which needs no token).
+        val hfToken = localProps.getProperty("hfToken")
+            ?: providers.gradleProperty("hfToken").orNull
+            ?: System.getenv("HF_TOKEN")
+            ?: ""
+        buildConfigField("String", "HF_TOKEN", "\"$hfToken\"")
     }
 
     signingConfigs {
@@ -150,6 +161,14 @@ dependencies {
 
     // Google AI client (Gemini) — used for receipt OCR
     implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
+
+    // Google AI Edge / MediaPipe LLM Inference — runs Gemma 3n (text + vision)
+    // fully on-device for the offline expense-capture fallback. tasks-vision
+    // supplies the com.google.mediapipe.framework.image.* helpers (MPImage /
+    // BitmapImageBuilder) that tasks-genai needs for the receipt-image path but
+    // does not itself bundle.
+    implementation("com.google.mediapipe:tasks-genai:0.10.35")
+    implementation("com.google.mediapipe:tasks-vision:0.10.35")
 
     // WorkManager — used by the offline-OCR queue to retry Gemini calls
     // when the device gets network back, even if the app was killed.

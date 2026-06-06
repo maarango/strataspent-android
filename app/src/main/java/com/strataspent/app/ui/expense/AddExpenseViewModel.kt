@@ -6,7 +6,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import android.content.Context
 import com.strataspent.app.data.AuthRepository
+import com.strataspent.app.data.Connectivity
 import com.strataspent.app.data.ExpenseRepository
+import com.strataspent.app.data.GemmaExpenseExtractor
 import com.strataspent.app.data.GroupRepository
 import com.strataspent.app.data.LanguagePreference
 import com.strataspent.app.data.OcrProcessingWorker
@@ -79,6 +81,7 @@ class AddExpenseViewModel(
     private val ocrRepo: OcrRepository,
     languagePref: LanguagePreference,
     private val pendingOcr: PendingOcrRepository,
+    private val gemmaExtractor: GemmaExpenseExtractor,
 ) : ViewModel() {
 
     val voiceLanguageTag: StateFlow<String?> = languagePref.voiceLanguageTag
@@ -183,9 +186,25 @@ class AddExpenseViewModel(
     fun runOcr(image: Bitmap, appContext: Context) {
         _state.update { it.copy(ocrLoading = true, ocrMessage = null) }
         viewModelScope.launch {
+            val online = Connectivity.isOnline(appContext)
+            val gemmaReady = gemmaExtractor.isReady()
+
+            // Clearly offline with a model on board → go straight on-device.
+            if (!online && gemmaReady) {
+                setOnDeviceWorking()
+                applyAiResult(gemmaExtractor.extractReceipt(image), source = "On-device AI — receipt scanned")
+                return@launch
+            }
+
             val result = ocrRepo.extractReceipt(image)
-            if (result is OcrRepository.OcrResult.Failure && result.retryable) {
-                // Looks like a real connectivity problem — queue for retry.
+            // Cloud unreachable OR no Gemini key — prefer on-device when ready.
+            val cloudUnusable = (result is OcrRepository.OcrResult.Failure && result.retryable) ||
+                result is OcrRepository.OcrResult.NotConfigured
+            if (cloudUnusable && gemmaReady) {
+                setOnDeviceWorking()
+                applyAiResult(gemmaExtractor.extractReceipt(image), source = "On-device AI — receipt scanned")
+            } else if (result is OcrRepository.OcrResult.Failure && result.retryable) {
+                // Cloud unreachable and no on-device model — queue for retry.
                 pendingOcr.enqueueImage(groupId, image)
                 OcrProcessingWorker.schedule(appContext)
                 _state.update {
@@ -201,13 +220,34 @@ class AddExpenseViewModel(
         }
     }
 
-    /** Parse a voice transcript into structured fields via Gemini. */
+    /** Parse a voice transcript into structured fields — cloud Gemini when
+     *  online, the on-device Gemma model when offline (if enabled/downloaded). */
     fun runVoiceInput(transcript: String, appContext: Context) {
         if (transcript.isBlank()) return
         _state.update { it.copy(ocrLoading = true, ocrMessage = "Heard: \"$transcript\"") }
         viewModelScope.launch {
+            val online = Connectivity.isOnline(appContext)
+            val gemmaReady = gemmaExtractor.isReady()
+
+            if (!online && gemmaReady) {
+                setOnDeviceWorking("Heard: \"$transcript\"")
+                applyAiResult(
+                    gemmaExtractor.transcribeToExpense(transcript, todayIso()),
+                    source = "On-device AI heard: \"$transcript\"",
+                )
+                return@launch
+            }
+
             val result = ocrRepo.transcribeToExpense(transcript, todayIso())
-            if (result is OcrRepository.OcrResult.Failure && result.retryable) {
+            val cloudUnusable = (result is OcrRepository.OcrResult.Failure && result.retryable) ||
+                result is OcrRepository.OcrResult.NotConfigured
+            if (cloudUnusable && gemmaReady) {
+                setOnDeviceWorking("Heard: \"$transcript\"")
+                applyAiResult(
+                    gemmaExtractor.transcribeToExpense(transcript, todayIso()),
+                    source = "On-device AI heard: \"$transcript\"",
+                )
+            } else if (result is OcrRepository.OcrResult.Failure && result.retryable) {
                 pendingOcr.enqueueVoice(groupId, transcript)
                 OcrProcessingWorker.schedule(appContext)
                 _state.update {
@@ -220,6 +260,18 @@ class AddExpenseViewModel(
             } else {
                 applyAiResult(result, source = "Heard: \"$transcript\"")
             }
+        }
+    }
+
+    /** Status shown while a (slower) on-device inference is in flight, so the
+     *  wait reads as intentional rather than a hang. */
+    private fun setOnDeviceWorking(prefix: String? = null) {
+        val lead = prefix?.let { "$it\n" } ?: ""
+        _state.update {
+            it.copy(
+                ocrLoading = true,
+                ocrMessage = lead + "Reading on-device (offline) — this can take up to a minute…",
+            )
         }
     }
 

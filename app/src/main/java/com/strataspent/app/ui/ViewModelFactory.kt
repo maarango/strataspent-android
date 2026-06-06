@@ -3,6 +3,7 @@ package com.strataspent.app.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.CreationExtras
+import com.strataspent.app.BuildConfig
 import com.strataspent.app.ServiceLocator
 import com.strataspent.app.ui.analytics.AnalyticsViewModel
 import com.strataspent.app.ui.auth.AuthViewModel
@@ -14,6 +15,7 @@ import com.strataspent.app.ui.groups.CreateGroupViewModel
 import com.strataspent.app.ui.groups.GroupListViewModel
 import com.strataspent.app.ui.reminders.AddReminderViewModel
 import com.strataspent.app.ui.reminders.RemindersListViewModel
+import com.strataspent.app.ui.settings.GemmaModelViewModel
 import com.strataspent.app.ui.settings.SettingsViewModel
 import com.strataspent.app.ui.split.SplitBillViewModel
 
@@ -59,6 +61,7 @@ class StrataViewModelFactory(
                 ocrRepo = locator.ocrRepo,
                 languagePref = locator.languagePref,
                 pendingOcr = locator.pendingOcr,
+                gemmaExtractor = locator.gemmaExtractor,
             )
             AddMembersViewModel::class.java -> AddMembersViewModel(
                 groupId = requireNotNull(groupId) { "groupId required for AddMembersViewModel" },
@@ -92,6 +95,12 @@ class StrataViewModelFactory(
             )
             SplitBillViewModel::class.java -> SplitBillViewModel(
                 ocrRepo = locator.ocrRepo,
+            )
+            GemmaModelViewModel::class.java -> GemmaModelViewModel(
+                prefs = locator.gemmaPrefs,
+                manager = locator.gemmaModelManager,
+                extractor = locator.gemmaExtractor,
+                embeddedToken = BuildConfig.HF_TOKEN,
             )
             else -> error("Unknown ViewModel: ${modelClass.name}")
         } as T
