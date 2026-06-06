@@ -59,6 +59,7 @@ fun AnalyticsScreen(
 ) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     val aiState by vm.aiState.collectAsStateWithLifecycle()
+    val categoryBreakdown by vm.categoryBreakdown.collectAsStateWithLifecycle()
     val currencyCode = LocalCurrencyCode.current
 
     Scaffold(
@@ -75,6 +76,8 @@ fun AnalyticsScreen(
     ) { inner ->
         var mode by remember { mutableStateOf(AnalyticsMode.GROUP) }
         val scope = if (mode == AnalyticsMode.GROUP) ui.group else ui.you
+        val categoryRows = if (mode == AnalyticsMode.GROUP) categoryBreakdown.group
+            else categoryBreakdown.you
 
         if (ui.group.expenditureCount == 0 && ui.you.expenditureCount == 0) {
             Box(
@@ -128,7 +131,13 @@ fun AnalyticsScreen(
                     onEditIncome = { showIncomeDialog = true },
                 )
             }
-            item { CategoryCard(scope.byCategory) }
+            item {
+                CategoryCard(
+                    rows = categoryRows,
+                    period = categoryBreakdown.period,
+                    onPeriod = vm::setCategoryPeriod,
+                )
+            }
             item { CashflowCard(scope.byDay) }
             item {
                 Text(
@@ -136,7 +145,7 @@ fun AnalyticsScreen(
                     style = MaterialTheme.typography.titleMedium,
                 )
             }
-            items(scope.byCategory) { row ->
+            items(categoryRows) { row ->
                 Row(
                     Modifier.fillMaxWidth().padding(vertical = 4.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -296,6 +305,7 @@ private fun RangeDropdown(
     selected: AnalysisRange,
     enabled: Boolean,
     onSelect: (AnalysisRange) -> Unit,
+    label: String = "Analysis period",
 ) {
     var expanded by remember { mutableStateOf(false) }
     ExposedDropdownMenuBox(
@@ -307,7 +317,7 @@ private fun RangeDropdown(
             onValueChange = {},
             readOnly = true,
             enabled = enabled,
-            label = { Text("Analysis period") },
+            label = { Text(label) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier = Modifier
                 .fillMaxWidth()
@@ -345,13 +355,33 @@ private fun SummaryCard(scope: AnalyticsScope, mode: AnalyticsMode) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CategoryCard(rows: List<CategoryBar>) {
+private fun CategoryCard(
+    rows: List<CategoryBar>,
+    period: AnalysisRange,
+    onPeriod: (AnalysisRange) -> Unit,
+) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
             Text("By category", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(12.dp))
-            BarChart(data = rows.map { it.category to it.total })
+            RangeDropdown(
+                selected = period,
+                enabled = true,
+                onSelect = onPeriod,
+                label = "Period",
+            )
+            Spacer(Modifier.height(12.dp))
+            if (rows.isEmpty()) {
+                Text(
+                    "No spending in this period.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                BarChart(data = rows.map { it.category to it.total })
+            }
         }
     }
 }

@@ -78,6 +78,13 @@ enum class AnalysisRange(val label: String, val months: Int?) {
     }
 }
 
+/** Period-filtered category totals for the "By category" card, per scope. */
+data class CategoryBreakdown(
+    val period: AnalysisRange = AnalysisRange.ALL,
+    val group: List<CategoryBar> = emptyList(),
+    val you: List<CategoryBar> = emptyList(),
+)
+
 /** UI state for the AI financial-analysis card. */
 data class AiAnalysisUi(
     val range: AnalysisRange = AnalysisRange.THREE_MONTHS,
@@ -120,6 +127,37 @@ class AnalyticsViewModel(
         Log.w("AnalyticsVM", "analytics flow error", t)
         emit(AnalyticsUi())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AnalyticsUi())
+
+    // ---- period-filtered "By category" breakdown ---------------------------
+
+    private val _categoryPeriod = MutableStateFlow(AnalysisRange.ALL)
+
+    /** The category breakdown for the period the user picked in the "By
+     *  category" card, for both scopes (the screen picks group vs you). */
+    val categoryBreakdown: StateFlow<CategoryBreakdown> = combine(
+        expenseRepo.expenditures(groupId),
+        authRepo.currentUser,
+        userDirectory.directory,
+        _categoryPeriod,
+    ) { exps, viewer, dir, period ->
+        val cutoff = period.cutoffIso()
+        val inRange = if (cutoff == null) exps
+            else exps.filter { it.date.isNotBlank() && it.date >= cutoff }
+        CategoryBreakdown(
+            period = period,
+            group = inRange
+                .filter { it.category != Categories.GLOBAL_INCOME && it.visibility != Visibility.PRIVATE }
+                .categoryBars(),
+            you = inRange
+                .filter { it.isOwnedBy(viewer, dir) && it.category != Categories.GLOBAL_INCOME }
+                .categoryBars(),
+        )
+    }.catch { t ->
+        Log.w("AnalyticsVM", "category breakdown flow error", t)
+        emit(CategoryBreakdown())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CategoryBreakdown())
+
+    fun setCategoryPeriod(range: AnalysisRange) { _categoryPeriod.value = range }
 
     fun updateMyIncome(amount: Double) {
         viewModelScope.launch {
@@ -247,6 +285,15 @@ private fun List<Expenditure>.toAnalytics(
         personal = personal,
     )
 }
+
+/** category → total, biggest first. Shared by the all-time scope and the
+ *  period-filtered "By category" card. */
+private fun List<Expenditure>.categoryBars(): List<CategoryBar> =
+    groupBy { it.category }
+        .mapValues { (_, list) -> list.sumOf { it.amount } }
+        .entries
+        .sortedByDescending { it.value }
+        .map { CategoryBar(it.key, it.value) }
 
 private fun List<Expenditure>.toScope(): AnalyticsScope {
     if (isEmpty()) return AnalyticsScope()
