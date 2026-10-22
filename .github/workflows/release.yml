@@ -3,14 +3,21 @@ name: Release AAB
 # Triggered when you push a tag like `v1.0.0` (or run manually via
 # Actions → "Release AAB" → Run workflow).
 #
-# Produces an upload-ready, signed app-release.aab attached to the
-# resulting GitHub Release. From there, upload to Play Console manually.
+# Builds a signed app-release.aab, uploads it to Play Console (internal
+# testing on tag pushes; any track when run manually), and attaches it to
+# the resulting GitHub Release.
 
 on:
   push:
     tags:
       - 'v*'
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      track:
+        description: 'Play Console track to upload to'
+        type: choice
+        options: [internal, alpha, beta, production]
+        default: internal
 
 jobs:
   build:
@@ -77,6 +84,19 @@ jobs:
 
       - name: Build release AAB
         run: ./gradlew bundleRelease --no-daemon
+
+      - name: Upload to Play Console
+        # Set PLAY_SERVICE_ACCOUNT_JSON in repo Secrets — the raw JSON key of
+        # a service account invited in Play Console → Users and permissions.
+        env:
+          ANDROID_PUBLISHER_CREDENTIALS: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          TRACK: ${{ inputs.track || 'internal' }}
+        run: |
+          if [ -z "$ANDROID_PUBLISHER_CREDENTIALS" ]; then
+            echo "ERROR: PLAY_SERVICE_ACCOUNT_JSON secret is not set." >&2
+            exit 1
+          fi
+          ./gradlew publishReleaseBundle --track "$TRACK" --no-daemon
 
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v4

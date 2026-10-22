@@ -108,7 +108,7 @@ Even for first releases, push to **Internal testing** before promoting:
 
 1. Test → Internal testing → Create new release
 2. Upload `app-release.aab`
-3. Release notes — paste `play-store/listing/release-notes.txt`
+3. Release notes — paste `app/src/main/play/release-notes/en-US/default.txt`
 4. Save → Review release → Start rollout to Internal testing
 5. Add testers (email addresses of yourself / family); copy the opt-in
    link they need to use.
@@ -174,7 +174,7 @@ play-store/
 │   ├── short-description.txt
 │   ├── full-description.txt
 │   ├── privacy-policy.md
-│   └── release-notes.txt
+│   └── (release notes live in app/src/main/play/release-notes/en-US/default.txt)
 └── screenshots/
     ├── README.md             # capture checklist
     ├── 01-groups.png
@@ -227,3 +227,43 @@ git push origin v1.0.1
 
 The Action attaches `app-release.aab` to the auto-created GitHub
 Release. Download it from there and upload to Play Console.
+
+## Automatic Play Console upload
+
+Uploads use [Gradle Play Publisher](https://github.com/Triple-T/gradle-play-publisher)
+with a Google Cloud **service account** — never your Google password.
+
+### One-time setup
+
+1. **Create the key** (Google Cloud project of your choice):
+   ```powershell
+   gcloud services enable androidpublisher.googleapis.com --project <PROJECT>
+   gcloud iam service-accounts create strataspent-publisher --project <PROJECT>
+   gcloud iam service-accounts keys create play-service-account.json `
+          --iam-account strataspent-publisher@<PROJECT>.iam.gserviceaccount.com
+   ```
+   `play-service-account.json` lands at the repo root and is gitignored.
+2. **Grant it access in Play Console** → Users and permissions → Invite new
+   user → paste the service-account email → App permissions → StrataSpent →
+   enable *Release to production, exclude devices, and use Play App Signing*
+   and *Release apps to testing tracks* → Invite.
+3. **GitHub secret** (for the Action):
+   ```powershell
+   gh secret set PLAY_SERVICE_ACCOUNT_JSON < play-service-account.json
+   ```
+   The workflow also needs the build secrets listed above.
+
+### Releasing
+
+Bump `versionCode`/`versionName`, update
+`app/src/main/play/release-notes/en-US/default.txt` (500-char limit), then
+either:
+
+- **Local:** `./gradlew publishReleaseBundle` (internal testing) or
+  `./gradlew publishReleaseBundle --track production`
+- **CI:** `git tag v1.2.0; git push origin v1.2.0` uploads to internal
+  testing; Actions → Release AAB → Run workflow lets you pick the track.
+
+Promote internal → production without rebuilding:
+`./gradlew promoteReleaseArtifact --from-track internal --promote-track production`.
+

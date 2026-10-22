@@ -78,6 +78,7 @@ secrets.properties
 node_modules/
 **/serviceAccount*.json
 **/*-service-account*.json
+play-service-account.json
 
 # =========================================================
 # IDE / editor files
