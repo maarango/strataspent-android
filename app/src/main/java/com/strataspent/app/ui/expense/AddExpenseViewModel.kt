@@ -263,6 +263,42 @@ class AddExpenseViewModel(
         }
     }
 
+    /** Parse a bank / card text message picked from the SMS inbox — cloud
+     *  Gemini when online, on-device Gemma as the fallback. Not queued when
+     *  both are unavailable: the message stays in the inbox to retry later. */
+    fun runSmsInput(body: String, receivedAtMillis: Long, appContext: Context) {
+        if (body.isBlank()) return
+        val receivedIso = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+            .format(java.util.Date(receivedAtMillis))
+        _state.update { it.copy(ocrLoading = true, ocrMessage = "Reading text message…") }
+        viewModelScope.launch {
+            val online = Connectivity.isOnline(appContext)
+            val gemmaReady = gemmaExtractor.isReady()
+
+            val result = if (online) ocrRepo.smsToExpense(body, receivedIso) else null
+            val cloudUnusable = result == null ||
+                (result is OcrRepository.OcrResult.Failure && result.retryable) ||
+                result is OcrRepository.OcrResult.NotConfigured
+            when {
+                cloudUnusable && gemmaReady -> {
+                    setOnDeviceWorking()
+                    applyAiResult(
+                        gemmaExtractor.smsToExpense(body, receivedIso),
+                        source = "On-device AI read the text message",
+                    )
+                }
+                result == null || (result is OcrRepository.OcrResult.Failure && result.retryable) ->
+                    _state.update {
+                        it.copy(
+                            ocrLoading = false,
+                            ocrMessage = "Offline or Gemini unreachable — try importing the text again when you're online.",
+                        )
+                    }
+                else -> applyAiResult(result, source = "Read from text message")
+            }
+        }
+    }
+
     /** Status shown while a (slower) on-device inference is in flight, so the
      *  wait reads as intentional rather than a hang. */
     private fun setOnDeviceWorking(prefix: String? = null) {

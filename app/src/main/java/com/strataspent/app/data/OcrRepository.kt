@@ -87,6 +87,24 @@ class OcrRepository(private val apiKey: String) {
             }
         }
 
+    /** Parse a bank / card transaction text message picked from the SMS inbox. */
+    suspend fun smsToExpense(body: String, receivedIso: String): OcrResult =
+        withContext(Dispatchers.IO) {
+            if (apiKey.isBlank()) return@withContext OcrResult.NotConfigured
+            if (body.isBlank()) return@withContext OcrResult.Failure(
+                "Empty message", retryable = false,
+            )
+            val model = newModel()
+            val prompt = ExpenseExtraction.smsPrompt(receivedIso, body)
+            runCatching {
+                val response = model.generateContent(content { text(prompt) })
+                wrapParse(response.text.orEmpty())
+            }.getOrElse { t ->
+                Log.w(TAG, "SMS → expense parse failed", t)
+                OcrResult.Failure(t.message ?: "SMS parse failed", retryable = isLikelyTransient(t))
+            }
+        }
+
     private fun newModel(): GenerativeModel = GenerativeModel(
         modelName = "gemini-2.5-flash",
         apiKey = apiKey,

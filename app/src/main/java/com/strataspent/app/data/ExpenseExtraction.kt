@@ -44,6 +44,16 @@ object ExpenseExtraction {
             .replace("{TRANSCRIPT}", transcript.replace("\"", "'"))
 
     /**
+     * Prompt for a bank / card transaction text message picked from the SMS
+     * inbox. [receivedIso] is the day the message arrived — the default date
+     * when the text itself doesn't state one.
+     */
+    fun smsPrompt(receivedIso: String, body: String): String =
+        SMS_PROMPT_TEMPLATE
+            .replace("{RECEIVED}", receivedIso)
+            .replace("{SMS}", body.replace("\"", "'"))
+
+    /**
      * Parse a model's raw text into a structured [OcrRepository.OcrResult.Success],
      * or `null` if no usable JSON object can be recovered. Tolerates markdown
      * fences and stray prose, and repairs JSON that a small on-device model
@@ -191,5 +201,33 @@ object ExpenseExtraction {
         try hard for "amount", since spelled-out numbers are very common.
 
         User said: "{TRANSCRIPT}"
+    """.trimIndent()
+
+    private val SMS_PROMPT_TEMPLATE = """
+        Below is a text message (SMS) from a bank, card issuer, or payment
+        service, in any language. It most likely notifies a purchase, payment,
+        transfer, or withdrawal. Extract the expense it describes. The message
+        was received on {RECEIVED}.
+
+        Return ONLY a JSON object (no prose, no markdown):
+
+        {
+          "category": one of ${Categories.ALL.joinToString(prefix = "[", postfix = "]") { "\"$it\"" }}
+              Infer it from the merchant (supermarket → "Food", gas station →
+              "Transport", pharmacy → "Health", streaming/cinema → "Entertainment",
+              card payment received → "Credit Card Payment", salary/deposit → "Global Income");
+              anything else → "Other",
+          "amount": the transaction amount as a plain number, no symbol or units.
+              Use the charged/paid amount — NOT the available balance, credit limit,
+              or card/account digits. Read the local number format correctly
+              ("1.234,56" → 1234.56, "$45.000" in COP/CLP → 45000),
+          "date": "YYYY-MM-DD" — the transaction date if the message states one,
+              otherwise {RECEIVED},
+          "note": the merchant or payee name (3–6 words), in the message's language
+        }
+
+        Use null for any field you genuinely cannot determine.
+
+        Message: "{SMS}"
     """.trimIndent()
 }

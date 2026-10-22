@@ -59,6 +59,14 @@ class GemmaExpenseExtractor(
         return run(ExpenseExtraction.voicePrompt(todayIso, transcript), image = null)
     }
 
+    /** Bank / card transaction text message → structured expense (text only). */
+    suspend fun smsToExpense(body: String, receivedIso: String): OcrRepository.OcrResult {
+        if (body.isBlank()) {
+            return OcrRepository.OcrResult.Failure("Empty message", retryable = false)
+        }
+        return run(ExpenseExtraction.smsPrompt(receivedIso, body), image = null)
+    }
+
     private suspend fun run(prompt: String, image: Bitmap?): OcrRepository.OcrResult =
         withContext(Dispatchers.IO) {
             mutex.withLock {
