@@ -11,6 +11,12 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
+    <!-- Import an expense from a bank / card text message in the SMS inbox.
+         Read-only; only the message the user picks is sent to the AI.
+         Play: requires the "SMS-based money management" permissions declaration. -->
+    <uses-permission android:name="android.permission.READ_SMS" />
+    <uses-feature android:name="android.hardware.telephony" android:required="false" />
+
     <!-- Voice expense input (system speech recognizer) -->
     <queries>
         <intent>

@@ -15,6 +15,7 @@ This policy explains what data we handle and why.
 | FCM device token | Deliver reminder push notifications | Cloud Firestore (Google) |
 | Receipt photos you choose to scan | Extract category/amount/date via OCR | Sent to Google Gemini; not retained by the app |
 | Voice transcripts | Parse natural-language expense descriptions | Sent to Google Gemini; not retained by the app |
+| A text message (SMS) you choose to import | Extract amount/date/merchant from a bank or card notification | Only the single message you tap is sent to Google Gemini (or parsed on-device); not retained by the app |
 
 We do not collect analytics, advertising IDs, or third-party trackers.
 
@@ -26,12 +27,16 @@ We do not collect analytics, advertising IDs, or third-party trackers.
   scanning a receipt.
 - We do not record raw audio for voice input; only the transcript Google's
   speech recognizer returns is processed.
+- We do not upload, store, or scan your SMS inbox. With your permission the
+  app lists recent texts on your device so you can pick one; only the
+  message you select is processed.
 
 ## Data sharing
 
 - Other members of any group you join can read every expenditure logged
   to that group (except entries you mark "private").
-- Receipt images and voice transcripts are sent to Google's Gemini API
+- Receipt images, voice transcripts, and text messages you choose to
+  import are sent to Google's Gemini API
   for parsing. Google's data-use policy for Generative AI APIs applies.
 - We do not sell or share your data with advertisers.
 

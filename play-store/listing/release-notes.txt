@@ -1,12 +1,9 @@
-Initial release.
+What's new in 1.1.0
 
-• Native Android client for the StrataSpent family-expense tracker.
-• Shared groups, balances, split ratios.
-• Receipt OCR powered by Google Gemini.
-• Voice input that understands natural-language descriptions in
-  English, Spanish, Portuguese, French, and German.
-• Offline queue: scan or speak when you're disconnected — everything
-  syncs when you're back online.
-• Analytics: group spending breakdown, personal cash flow.
-• One-time bill splitter for bar tabs and group dinners.
-• Reminders with one-tap "Pay" action.
+• Import from text message: pick a bank or card SMS and AI fills in the
+  amount, date, category, and merchant.
+• AI financial analysis on the Analytics tab, with trends and tips.
+• Period filter on the "By category" chart.
+• Personal analysis covers public and private spending.
+• Inline calendar to view a single day's expenses.
+• Optional on-device AI for fully offline receipt and voice capture.

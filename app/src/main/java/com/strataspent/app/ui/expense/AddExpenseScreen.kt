@@ -14,6 +14,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import android.app.Activity
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -23,6 +24,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Sms
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -56,6 +58,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.strataspent.app.R
 import com.strataspent.app.data.resolveDisplayName
@@ -95,6 +98,26 @@ fun AddExpenseScreen(
                 }
             },
         )
+    }
+
+    var showSmsSheet by remember { mutableStateOf(false) }
+    if (showSmsSheet) {
+        SmsPickerSheet(
+            onDismiss = { showSmsSheet = false },
+            onPicked = { msg -> vm.runSmsInput(msg.body, msg.receivedAtMillis, appContext) },
+        )
+    }
+    val smsPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            showSmsSheet = true
+        } else {
+            vm.reportVoiceFailure(
+                "SMS access was denied. Allow it under Settings → Apps → StrataSpent → " +
+                    "Permissions to import expenses from bank text messages."
+            )
+        }
     }
 
     val voiceLanguageTag by vm.voiceLanguageTag.collectAsStateWithLifecycle()
@@ -223,6 +246,18 @@ fun AddExpenseScreen(
                     },
                     label = { Text("Voice") },
                     leadingIcon = { Icon(Icons.Filled.Mic, contentDescription = null) },
+                    enabled = !state.ocrLoading,
+                )
+                AssistChip(
+                    onClick = {
+                        val hasSms = ContextCompat.checkSelfPermission(
+                            context, android.Manifest.permission.READ_SMS
+                        ) == PackageManager.PERMISSION_GRANTED
+                        if (hasSms) showSmsSheet = true
+                        else smsPermissionLauncher.launch(android.Manifest.permission.READ_SMS)
+                    },
+                    label = { Text("Text message") },
+                    leadingIcon = { Icon(Icons.Filled.Sms, contentDescription = null) },
                     enabled = !state.ocrLoading,
                 )
             }
