@@ -4,6 +4,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("com.google.gms.google-services")
+    id("com.github.triplet.play")
 }
 
 // local.properties is gitignored and lives at the repo root; we read it
@@ -24,6 +25,21 @@ val localProps = Properties().apply {
 val keystoreProps = Properties().apply {
     val f = rootProject.file("keystore.properties")
     if (f.exists()) f.inputStream().use { load(it) }
+}
+
+// Play Console upload (Gradle Play Publisher). Credentials are a Google Cloud
+// service-account JSON key with release permissions in Play Console:
+// locally `play-service-account.json` at the repo root (gitignored), in CI the
+// ANDROID_PUBLISHER_CREDENTIALS env var (the JSON contents), which the plugin
+// reads on its own. Release notes come from
+// src/main/play/release-notes/en-US/default.txt.
+//   ./gradlew publishReleaseBundle                       → internal testing
+//   ./gradlew publishReleaseBundle --track production    → production
+play {
+    val keyFile = rootProject.file("play-service-account.json")
+    if (keyFile.exists()) serviceAccountCredentials.set(keyFile)
+    defaultToAppBundles.set(true)
+    track.set("internal")
 }
 
 android {
