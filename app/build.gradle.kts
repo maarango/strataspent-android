@@ -28,12 +28,12 @@ val keystoreProps = Properties().apply {
 
 android {
     namespace = "com.strataspent.app"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.strataspent.app"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 4
         versionName = "1.1.0"
 
